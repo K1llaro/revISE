@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Astro Starter Kit: Basics
 
 ```sh
@@ -44,3 +45,7 @@ All commands are run from the root of the project, from a terminal:
 ## 👀 Want to learn more?
 
 Feel free to check [our documentation](https://docs.astro.build) or jump into our [Discord server](https://astro.build/chat).
+=======
+# revISE
+A website project to allow Immersive Software Engineering (ISE) of University of Limerick Students to study more efficiently, productively and improve their skills effectively. It utilizes latest Gemini API's, uses user's API key which is stored locally on their device for better security and features a unified database for all educational material
+>>>>>>> 7e06ba9d20fef1122a234e7254b2269f1c47f67b

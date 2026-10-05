@@ -1,0 +1,97 @@
+---
+// src/pages/auth.astro
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>ISE Learning - Login</title>
+    <style>
+      body { font-family: system-ui, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; background: #0f172a; color: #f8fafc; margin: 0; }
+      .card { background: #1e293b; padding: 2.5rem; border-radius: 12px; width: 100%; max-width: 400px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+      h2 { margin-top: 0; text-align: center; }
+      .field { margin-bottom: 1.2rem; }
+      label { display: block; margin-bottom: 0.4rem; font-size: 0.9rem; color: #94a3b8; }
+      input { width: 100%; padding: 0.75rem; border-radius: 6px; border: 1px solid #334155; background: #0f172a; color: white; box-sizing: border-box; }
+      button { width: 100%; padding: 0.75rem; border-radius: 6px; border: none; font-weight: bold; cursor: pointer; margin-top: 0.5rem; }
+      .btn-primary { background: #3b82f6; color: white; }
+      .btn-secondary { background: transparent; color: #94a3b8; border: 1px solid #334155; margin-top: 0.8rem; }
+      .msg { margin-top: 1rem; font-size: 0.85rem; text-align: center; }
+      .error { color: #ef4444; }
+      .success { color: #22c55e; }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h2 id="title">Student Login</h2>
+      <div class="field">
+        <label>UL Email</label>
+        <input type="email" id="email" placeholder="student@studentmail.ul.ie" required />
+      </div>
+      <div class="field">
+        <label>Password</label>
+        <input type="password" id="password" placeholder="••••••••" required />
+      </div>
+      <button id="submitBtn" class="btn-primary">Sign In</button>
+      <button id="toggleBtn" class="btn-secondary">Need an account? Register</button>
+      <div id="statusMsg" class="msg"></div>
+    </div>
+
+    <script>
+      import { supabase } from '../lib/supabase';
+
+      let isSignUp = false;
+      const title = document.getElementById('title')!;
+      const submitBtn = document.getElementById('submitBtn')!;
+      const toggleBtn = document.getElementById('toggleBtn')!;
+      const emailInput = document.getElementById('email') as HTMLInputElement;
+      const passwordInput = document.getElementById('password') as HTMLInputElement;
+      const statusMsg = document.getElementById('statusMsg')!;
+
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session) window.location.href = '/profile';
+      });
+
+      toggleBtn.addEventListener('click', () => {
+        isSignUp = !isSignUp;
+        title.innerText = isSignUp ? 'Student Registration' : 'Student Login';
+        submitBtn.innerText = isSignUp ? 'Sign Up' : 'Sign In';
+        toggleBtn.innerText = isSignUp ? 'Already have an account? Sign In' : 'Need an account? Register';
+        statusMsg.innerText = '';
+      });
+
+      submitBtn.addEventListener('click', async () => {
+        const email = emailInput.value;
+        const password = passwordInput.value;
+        statusMsg.className = 'msg';
+        statusMsg.innerText = 'Processing...';
+
+        if (isSignUp) {
+          const { error } = await supabase.auth.signUp({ 
+            email, 
+            password,
+            options: {
+                // open /profile after validating account in mail
+                emailRedirectTo: window.location.origin + '/profile'
+            }
+});
+          if (error) {
+            statusMsg.className = 'msg error';
+            statusMsg.innerText = error.message;
+          } else {
+            statusMsg.className = 'msg success';
+            statusMsg.innerText = 'Registration successful! Check your email or try signing in.';
+          }
+        } else {
+          const { error } = await supabase.auth.signInWithPassword({ email, password });
+          if (error) {
+            statusMsg.className = 'msg error';
+            statusMsg.innerText = error.message;
+          } else {
+            window.location.href = '/profile';
+          }
+        }
+      });
+    </script>
+  </body>
+</html>

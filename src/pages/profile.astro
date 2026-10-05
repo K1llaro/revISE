@@ -1,0 +1,105 @@
+---
+// src/pages/profile.astro
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>ISE Learning - Profile</title>
+    <style>
+      body { font-family: system-ui, sans-serif; background: #0f172a; color: #f8fafc; margin: 0; padding: 2rem; display: flex; justify-content: center; }
+      .container { background: #1e293b; padding: 2rem; border-radius: 12px; width: 100%; max-width: 600px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+      header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; padding-bottom: 1rem; margin-bottom: 1.5rem; }
+      .btn-danger { background: #dc2626; color: white; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; }
+      .btn-save { background: #10b981; color: white; border: none; padding: 0.6rem 1.2rem; border-radius: 6px; cursor: pointer; font-weight: bold; margin-top: 0.5rem; }
+      .field { margin-bottom: 1.5rem; }
+      label { display: block; margin-bottom: 0.4rem; color: #94a3b8; font-size: 0.9rem; }
+      input { width: 100%; padding: 0.75rem; border-radius: 6px; border: 1px solid #334155; background: #0f172a; color: white; box-sizing: border-box; }
+      .note { font-size: 0.8rem; color: #64748b; margin-top: 0.3rem; }
+      .msg { font-size: 0.85rem; margin-top: 0.5rem; }
+      .success { color: #34d399; }
+      .error { color: #f87171; }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <div>
+          <h2>Student Dashboard</h2>
+          <span id="userEmail" style="color: #38bdf8; font-size: 0.9rem;">Loading...</span>
+        </div>
+        <button id="logoutBtn" class="btn-danger">Log Out</button>
+      </header>
+
+      <div class="field">
+        <label for="apiKey">Google AI Studio API Key</label>
+        <input type="password" id="apiKey" placeholder="AIzaSy..." />
+        <div class="note">
+          Get your free API key from <a href="https://aistudio.google.com/" target="_blank" style="color: #60a5fa;">Google AI Studio</a>. It will be stored securely in your Supabase profile.
+        </div>
+        <button id="saveKeyBtn" class="btn-save">Save API Key</button>
+        <div id="saveMsg" class="msg"></div>
+      </div>
+    </div>
+
+    <script>
+      import { supabase } from '../lib/supabase';
+
+      const userEmail = document.getElementById('userEmail')!;
+      const apiKeyInput = document.getElementById('apiKey') as HTMLInputElement;
+      const saveKeyBtn = document.getElementById('saveKeyBtn')!;
+      const saveMsg = document.getElementById('saveMsg')!;
+      const logoutBtn = document.getElementById('logoutBtn')!;
+
+      let currentUserId = '';
+
+      async function init() {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+          window.location.href = '/auth';
+          return;
+        }
+
+        currentUserId = session.user.id;
+        userEmail.innerText = session.user.email || 'Authenticated User';
+
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('gemini_api_key')
+          .eq('id', currentUserId)
+          .single();
+
+        if (data && data.gemini_api_key) {
+          apiKeyInput.value = data.gemini_api_key;
+        }
+      }
+
+      init();
+
+      saveKeyBtn.addEventListener('click', async () => {
+        saveMsg.className = 'msg';
+        saveMsg.innerText = 'Saving...';
+
+        const key = apiKeyInput.value.trim();
+
+        const { error } = await supabase
+          .from('profiles')
+          .update({ gemini_api_key: key, updated_at: new Date().toISOString() })
+          .eq('id', currentUserId);
+
+        if (error) {
+          saveMsg.className = 'msg error';
+          saveMsg.innerText = 'Error saving key: ' + error.message;
+        } else {
+          saveMsg.className = 'msg success';
+          saveMsg.innerText = 'API Key saved successfully!';
+        }
+      });
+
+      logoutBtn.addEventListener('click', async () => {
+        await supabase.auth.signOut();
+        window.location.href = '/auth';
+      });
+    </script>
+  </body>
+</html>
