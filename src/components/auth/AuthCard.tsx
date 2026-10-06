@@ -1,190 +1,98 @@
-import React, { useState } from 'react';
-import { Mail, Lock, Eye, EyeOff, KeyRound } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ShieldCheck, AlertTriangle, Loader2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-import type { AuthMode, StudyYear, UserSession } from '../../types/ise';
-import { ApiKeyTooltip } from '../common/LayoutComponents';
+import type { UserSession } from '../../types/ise';
 
-export const AuthCard: React.FC<{ onSuccessAuth: (u: UserSession) => void }> = ({ onSuccessAuth }) => {
-  const [mode, setMode] = useState<AuthMode>('signin');
-  const [email, setEmail] = useState('');
-  const [nickname, setNickname] = useState('');
-  const [studyYear, setStudyYear] = useState<StudyYear>('year1');
-  const [password, setPassword] = useState('');
-  const [geminiApiKey, setGeminiApiKey] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [showApiKey, setShowApiKey] = useState(false);
+export const AuthCard: React.FC<{
+  onSuccessAuth: (u: UserSession) => void;
+  securityError?: string | null;
+}> = ({ securityError }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [isAwaitingConfirmation, setIsAwaitingConfirmation] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setStatusMessage(null);
+  useEffect(() => {
+    if (securityError) {
+      setStatusMessage(securityError);
+    }
+  }, [securityError]);
+
+  // 🐙 Авторизация через GitHub с запросом доступа к закрытым подтвержденным адресам
+  const handleGitHubSignIn = async () => {
     setIsSubmitting(true);
+    setStatusMessage(null);
 
-    if (mode === 'signup') {
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: { nickname, study_year: studyYear },
-          emailRedirectTo: typeof window !== 'undefined' ? `${window.location.origin}` : undefined,
-        },
-      });
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'github',
+      options: {
+        scopes: 'read:user user:email',
+        redirectTo: typeof window !== 'undefined' ? `${window.location.origin}` : undefined,
+      },
+    });
 
+    if (error) {
       setIsSubmitting(false);
-      if (error) return setStatusMessage({ type: 'error', text: error.message });
-
-      if (geminiApiKey.trim()) localStorage.setItem('gemini_api_key', geminiApiKey.trim());
-
-      if (data.user && !data.session) {
-        setIsAwaitingConfirmation(true);
-      } else if (data.session) {
-        onSuccessAuth({ id: data.user!.id, email, nickname, studyYear, apiKey: geminiApiKey.trim() });
-      }
-    } else {
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-      setIsSubmitting(false);
-      if (error) {
-        return setStatusMessage({
-          type: 'error',
-          text: error.message.toLowerCase().includes('email not confirmed')
-            ? 'Account not activated! Please click the confirmation link sent to your email.'
-            : error.message,
-        });
-      }
-
-      if (data.user) {
-        const { data: prof } = await supabase.from('profiles').select('nickname, study_year').eq('id', data.user.id).single();
-        const localKey = localStorage.getItem('gemini_api_key') || undefined;
-        onSuccessAuth({
-          id: data.user.id,
-          email: data.user.email || email,
-          nickname: prof?.nickname,
-          studyYear: (prof?.study_year as StudyYear) || 'year1',
-          apiKey: localKey,
-        });
-      }
+      setStatusMessage(error.message);
     }
   };
 
   return (
-    <div className="w-full max-w-[440px] mx-auto p-7 rounded-2xl border border-white/10 bg-[#060c20]/90 backdrop-blur-2xl shadow-2xl text-left">
-      {isAwaitingConfirmation ? (
-        <div className="text-center py-4 space-y-4">
-          <Mail className="h-12 w-12 text-[#3ccb57] mx-auto animate-pulse" />
-          <h3 className="text-lg font-bold text-white">Check Your Email</h3>
-          <p className="text-xs text-slate-300">We've sent an activation link to <strong className="text-white">{email}</strong>. Confirm it to activate your account.</p>
-          <button onClick={() => { setIsAwaitingConfirmation(false); setMode('signin'); }} className="w-full py-2.5 rounded-xl font-bold text-xs bg-[#3ccb57] text-black cursor-pointer">Back to Sign In</button>
+    <div className="w-full max-w-[440px] mx-auto p-8 rounded-2xl border border-white/10 bg-[#060c20]/90 backdrop-blur-2xl shadow-2xl text-center animate-fade-in space-y-6">
+      {/* Логотип */}
+      <div>
+        <h1 className="text-4xl font-black text-white tracking-tight select-none">
+          rev<span className="text-[#3ccb57] drop-shadow-[0_0_20px_rgba(60,203,87,0.4)]">ISE</span>
+        </h1>
+        <p className="text-xs text-slate-400 mt-1.5 font-mono">
+          Immersive Software Engineering AI Station
+        </p>
+      </div>
+
+      {/* Ошибка безопасности, если почта на GitHub не подтверждена */}
+      {statusMessage && (
+        <div className="p-3.5 rounded-xl bg-red-950/40 border border-red-500/30 text-xs text-red-200 text-left leading-relaxed flex items-start gap-2.5">
+          <AlertTriangle className="h-4 w-4 text-red-400 shrink-0 mt-0.5" />
+          <div>{statusMessage}</div>
         </div>
-      ) : (
-        <>
-          <div className="flex justify-between border-b border-white/10 pb-3 mb-5">
-            <div className="p-1 rounded-xl bg-black/40 text-xs font-semibold">
-              <button onClick={() => setMode('signin')} className={`px-4 py-1.5 rounded-lg ${mode === 'signin' ? 'bg-[#3ccb57] text-black' : 'text-slate-400'}`}>Sign In</button>
-              <button onClick={() => setMode('signup')} className={`px-4 py-1.5 rounded-lg ${mode === 'signup' ? 'bg-[#3ccb57] text-black' : 'text-slate-400'}`}>Sign Up</button>
-            </div>
-          </div>
-
-          <div className="text-center mb-6">
-            <h1 className="text-3xl font-black text-white">rev<span className="text-[#3ccb57]">ISE</span></h1>
-            <p className="text-xs text-slate-400 mt-1">Immersive Software Engineering AI Station</p>
-          </div>
-
-          {statusMessage && (
-            <div className={`p-3 rounded-lg text-xs mb-4 ${statusMessage.type === 'success' ? 'bg-[#3ccb57]/10 text-[#3ccb57]' : 'bg-red-950/40 text-red-200'}`}>
-              {statusMessage.text}
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit} className="space-y-3.5">
-            {mode === 'signup' && (
-              <>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">Nickname</label>
-                  <input
-                    type="text"
-                    required
-                    value={nickname}
-                    onChange={(e) => setNickname(e.target.value)}
-                    placeholder="e.g. Kiril_Dev"
-                    className="w-full p-2.5 rounded-xl bg-black/50 border border-white/10 text-xs text-white focus:outline-none focus:border-[#3ccb57]"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">Study Year</label>
-                  <select
-                    value={studyYear}
-                    onChange={(e) => setStudyYear(e.target.value as StudyYear)}
-                    className="w-full p-2.5 rounded-xl bg-black/50 border border-white/10 text-xs text-[#3ccb57] font-semibold focus:outline-none focus:border-[#3ccb57]"
-                  >
-                    <option value="year1">Year 1 (Freshmen 2026 - Java, DevOps, Cloud)</option>
-                    <option value="year2">Year 2 (Sophomores - Systems, Databases)</option>
-                    <option value="year3">Year 3 (Residency & Enterprise Systems)</option>
-                    <option value="year4">Year 4 (Senior Capstone & Architecture)</option>
-                  </select>
-                </div>
-              </>
-            )}
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">Email</label>
-              <input
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="student@studentmail.ul.ie"
-                className="w-full p-2.5 rounded-xl bg-black/50 border border-white/10 text-xs text-white focus:outline-none focus:border-[#3ccb57]"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">Password</label>
-              <div className="relative">
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full p-2.5 pr-10 rounded-xl bg-black/50 border border-white/10 text-xs text-white focus:outline-none focus:border-[#3ccb57]"
-                />
-                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-2.5 text-slate-400">
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
-            </div>
-
-            {mode === 'signup' && (
-              <div>
-                <div className="flex justify-between items-center mb-1">
-                  <label className="text-xs font-semibold text-slate-300">Google AI Studio Key</label>
-                  <ApiKeyTooltip />
-                </div>
-                <div className="relative">
-                  <input
-                    type={showApiKey ? 'text' : 'password'}
-                    required
-                    value={geminiApiKey}
-                    onChange={(e) => setGeminiApiKey(e.target.value)}
-                    placeholder="AIzaSy..."
-                    className="w-full p-2.5 pr-10 rounded-xl bg-black/50 border border-white/10 text-xs font-mono text-white focus:outline-none focus:border-[#3ccb57]"
-                  />
-                  <button type="button" onClick={() => setShowApiKey(!showApiKey)} className="absolute right-3 top-2.5 text-slate-400">
-                    {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
-              </div>
-            )}
-
-            <button type="submit" disabled={isSubmitting} className="w-full py-2.5 rounded-xl font-bold text-xs bg-[#3ccb57] text-black cursor-pointer">
-              {isSubmitting ? 'Processing...' : mode === 'signin' ? 'Sign In' : 'Sign Up'}
-            </button>
-          </form>
-        </>
       )}
+
+      {/* Описание для студента */}
+      <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 text-xs text-slate-300 leading-relaxed text-left">
+        <p className="mb-1 text-white font-semibold flex items-center gap-1.5">
+          <span className="h-2 w-2 rounded-full bg-[#3ccb57]" />
+          University of Limerick Access
+        </p>
+        <span className="text-slate-400 text-[11px]">
+          Sign in using your GitHub account associated with your verified <code className="text-[#3ccb57] font-mono">@studentmail.ul.ie</code> address.
+        </span>
+      </div>
+
+      {/* Главная кнопка входа в 1 клик */}
+      <button
+        type="button"
+        onClick={handleGitHubSignIn}
+        disabled={isSubmitting}
+        className="w-full py-3.5 px-5 rounded-xl font-bold text-xs bg-black text-white hover:bg-zinc-900 active:scale-[0.99] transition-all flex items-center justify-center gap-3 shadow-xl cursor-pointer border border-white/15 disabled:opacity-50"
+      >
+        {isSubmitting ? (
+          <>
+            <Loader2 className="h-4 w-4 animate-spin text-[#3ccb57]" />
+            <span>Connecting to GitHub...</span>
+          </>
+        ) : (
+          <>
+            <svg className="h-4 w-4 shrink-0 fill-current" viewBox="0 0 24 24">
+              <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02_0 0024 12c0-6.63-5.37-12-12-12z" />
+            </svg>
+            <span>Continue with GitHub</span>
+          </>
+        )}
+      </button>
+
+      {/* Бейдж безопасности */}
+      <div className="pt-2 border-t border-white/5 flex items-center justify-center gap-1.5 text-[11px] text-slate-500 font-mono">
+        <ShieldCheck className="h-3.5 w-3.5 text-[#3ccb57]" />
+        <span>Cryptographically verified student access</span>
+      </div>
     </div>
   );
 };

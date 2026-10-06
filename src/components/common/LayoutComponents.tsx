@@ -96,10 +96,8 @@ export const Navbar: React.FC = () => (
 );
 
 export const Footer: React.FC = () => (
-  <footer className="w-full border-t border-white/[0.06] bg-[#02050f]/80 py-5 text-xs text-slate-500">
+  <footer className="w-full border-t border-white/[0.06] bg-[#02050f]/80 py-2.5 sm:py-3 text-xs text-slate-500">
     <div className="w-full px-6 sm:px-10 flex flex-col sm:flex-row justify-between items-center gap-3">
-      <span>rev<span className="text-[#3ccb57]">ISE</span></span>
-      <span>Calibrated to ISE LM173 Telemetry Palette</span>
       <a href="https://aistudio.google.com" target="_blank" rel="noopener noreferrer" className="hover:text-[#3ccb57]">Google AI Studio</a>
     </div>
   </footer>

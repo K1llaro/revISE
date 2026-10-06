@@ -1,4 +1,44 @@
 @import "tailwindcss";
+
 html {
-  zoom: 1.1; /* 👈 Увеличивает абсолютно весь интерфейс на 110% */
+  font-size: 110%;
 }
+
+html, body {
+  height: 100vh;
+  width: 100vw;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+/* 🎨 Тонкий темный скроллбар для Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) rgba(6, 12, 32, 0.6);
+}
+
+/* 🎨 Тонкий темный скроллбар для Chrome, Safari, Edge */
+*::-webkit-scrollbar {
+  width: 5px;  /* Очень тонкая полоса (вместо стандартных 16px) */
+  height: 5px; /* Для горизонтальной прокрутки, если появится */
+}
+
+/* Темная подложка-дорожка */
+*::-webkit-scrollbar-track {
+  background: rgba(6, 12, 32, 0.5);
+  border-radius: 9999px;
+}
+
+/* Сам темный ползунок */
+*::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 9999px;
+  transition: background-color 0.2s ease;
+}
+
+/* Фирменная неоновая подсветка revISE при наведении на скроллбар */
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(60, 203, 87, 0.5);
+}
+

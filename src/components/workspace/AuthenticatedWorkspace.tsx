@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Brain, Code2, Bug, Upload, Settings, History, Shield } from 'lucide-react';
+import { Brain, Code2, Bug, Upload, Settings, History, Shield, Trophy } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-import type { UserSession, StudyYear, ActiveModal, AppView, TestHistoryItem, FlaggedMaterial, AttachedFile, QuizQuestion, ProgrammingChallenge, CodeAnalysisDrill, QuestionReviewDetail } from '../../types/ise';
+import type { UserSession, StudyYear, ActiveModal, AppView, TestHistoryItem, FlaggedMaterial, AttachedFile, QuizQuestion, ProgrammingChallenge, CodeAnalysisDrill, QuestionReviewDetail, LeaderboardEntry } from '../../types/ise';
 import { DEFAULT_YEAR_PROMPTS } from '../../lib/constants';
 import { callGemini } from '../../lib/gemini';
 import { ActiveQuizView, QuizResultsView, ActiveProgView, ProgResultsView, ActiveAnalysisView, AnalysisResultsView } from './ActiveViews';
-import { QuizModal, ProgrammingModal, AnalysisModal, UploadModal, AdminModal, HistoryModal, SettingsModal } from './WorkspaceModals';
+import { QuizModal, ProgrammingModal, AnalysisModal, UploadModal, AdminModal, HistoryModal, SettingsModal, LeaderboardModal } from './WorkspaceModals';
 
 export const AuthenticatedWorkspace: React.FC<{
   user: UserSession;
@@ -18,6 +18,22 @@ export const AuthenticatedWorkspace: React.FC<{
   const [currentYear, setCurrentYear] = useState<StudyYear>(user.studyYear || 'year1');
   const [yearPrompts, setYearPrompts] = useState<Record<StudyYear, string>>(DEFAULT_YEAR_PROMPTS);
 
+  // Dynamic Subtitle Roll
+  const DYNAMIC_SUBTITLES = [
+    'Mission Control', 'Compiler Chamber', 'Mental Execution Rig', 'Bug Hunting Ground',
+    'Studio LM173 Terminal', 'Residency Prep', 'Zero-Day Sandbox', 'Syntax Foundry',
+    'Runtime Intelligence', 'Off-by-One Detector', 'Git Rebase Zone', 'Learning Station',
+  ];
+  const [subtitle, setSubtitle] = useState('Learning Station');
+
+  useEffect(() => {
+    setSubtitle(DYNAMIC_SUBTITLES[Math.floor(Math.random() * DYNAMIC_SUBTITLES.length)]);
+  }, []);
+
+  const handleShuffleSubtitle = () => {
+    setSubtitle(DYNAMIC_SUBTITLES[Math.floor(Math.random() * DYNAMIC_SUBTITLES.length)]);
+  };
+
   // Custom Titles
   const [quizCustomTitle, setQuizCustomTitle] = useState('');
   const [progCustomTitle, setProgCustomTitle] = useState('');
@@ -29,6 +45,10 @@ export const AuthenticatedWorkspace: React.FC<{
 
   const [historyList, setHistoryList] = useState<TestHistoryItem[]>([]);
   const [flaggedItems, setFlaggedItems] = useState<FlaggedMaterial[]>([]);
+
+  // Leaderboard Data
+  const [leaderboardEntries, setLeaderboardEntries] = useState<LeaderboardEntry[]>([]);
+  const [isLoadingLeaderboard, setIsLoadingLeaderboard] = useState(false);
 
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationError, setGenerationError] = useState<string | null>(null);
@@ -78,14 +98,103 @@ export const AuthenticatedWorkspace: React.FC<{
 
   const isAdmin = user.email === 'dinosaurkiril@gmail.com';
 
+  // Расчет очков с множителем сложности
+  const calculatePoints = (scorePercent: number, difficulty = 'Standard') => {
+    let base = 0;
+    if (scorePercent >= 80) base = 100;
+    else if (scorePercent >= 65) base = 50;
+    else if (scorePercent >= 40) base = 20;
+
+    const multipliers: Record<string, number> = {
+      'Very Easy': 0.5,
+      'Easy': 0.8,
+      'Standard': 1.0,
+      'Hard': 1.5,
+      'Challenge': 2.5,
+    };
+    const mult = multipliers[difficulty] || 1.0;
+    return Math.round(base * mult);
+  };
+
   const handleAddNewTag = async (tagName: string) => {
     const clean = tagName.startsWith('#') ? tagName : `#${tagName}`;
     await supabase.from('curriculum_tags').upsert({ name: clean }, { onConflict: 'name' });
     setAvailableTags((prev) => Array.from(new Set([clean, ...prev])));
   };
 
+  // 🏆 Загрузка и расчет позиций лидерборда
+  const fetchLeaderboardData = async () => {
+    setIsLoadingLeaderboard(true);
+
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    // 1. Получаем профили студентов
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, nickname, real_name, study_year, hide_from_leaderboard, leaderboard_accepted')
+      .eq('hide_from_leaderboard', false);
+
+    // 2. Получаем историю за 30 дней
+    const { data: allHistory } = await supabase
+      .from('test_history')
+      .select('user_id, score, max_score, points_earned, created_at')
+      .gte('created_at', thirtyDaysAgo.toISOString());
+
+    if (profiles) {
+      const entries: LeaderboardEntry[] = profiles.map((prof) => {
+        const userTests = (allHistory || []).filter((h) => h.user_id === prof.id);
+
+        const totalPoints = userTests.reduce((acc, t) => acc + (t.points_earned || 0), 0);
+        const avgAccuracy = userTests.length > 0
+          ? Math.round(userTests.reduce((acc, t) => acc + (t.score / t.max_score) * 100, 0) / userTests.length)
+          : 0;
+
+        // 🌟 БЕЗГРАНИЧНЫЙ TOTAL RATING: Points × (Accuracy / 100)
+        const totalIndex = totalPoints * (avgAccuracy / 100);
+
+        return {
+          userId: prof.id,
+          rank: 0,
+          nickname: prof.nickname || 'Student',
+          realName: prof.real_name || undefined,
+          studyYear: (prof.study_year as StudyYear) || 'year1',
+          monthlyAccuracy: avgAccuracy,
+          isePoints: totalPoints,
+          totalScore: totalIndex,
+          isCurrentUser: prof.id === user.id,
+        };
+      });
+
+      // Сортировка по Total Score
+      // 🏆 Сортировка с многоуровневыми тай-брейкерами:
+      entries.sort((a, b) => {
+        // 1. Главный показатель — Total Rating
+        if (b.totalScore !== a.totalScore) {
+          return b.totalScore - a.totalScore;
+        }
+        // 2. Тай-брейкер 1: При равном Total побеждает более высокая точность (9% > 0%)
+        if (b.monthlyAccuracy !== a.monthlyAccuracy) {
+          return b.monthlyAccuracy - a.monthlyAccuracy;
+        }
+        // 3. Тай-брейкер 2: При равной точности побеждает большее количество XP
+        if (b.isePoints !== a.isePoints) {
+          return b.isePoints - a.isePoints;
+        }
+        // 4. По алфавиту
+        return a.nickname.localeCompare(b.nickname);
+      });
+
+      entries.forEach((e, idx) => {
+        e.rank = idx + 1;
+      });
+
+      setLeaderboardEntries(entries);
+    }
+    setIsLoadingLeaderboard(false);
+  };
+
   const loadData = async () => {
-    // 1. Tags
     const { data: tags } = await supabase.from('curriculum_tags').select('name');
     if (tags && tags.length > 0) {
       setAvailableTags(tags.map((t) => t.name));
@@ -93,7 +202,6 @@ export const AuthenticatedWorkspace: React.FC<{
       setAvailableTags(['#Java_OOP', '#Java_Arrays_Collections', '#AWS_CDK_Infrastructure', '#GitHub_Actions_CICD', '#Comp_Org_Buses']);
     }
 
-    // 2. History with details and rawDate
     const { data: hist } = await supabase
       .from('test_history')
       .select('*')
@@ -120,6 +228,7 @@ export const AuthenticatedWorkspace: React.FC<{
             type: h.type,
             score: h.score,
             maxScore: h.max_score,
+            pointsEarned: h.points_earned || 0,
             timeSpent: h.time_spent,
             aiFeedback: parsedAdvice || h.ai_feedback,
             weakSpotsAdvice: parsedAdvice,
@@ -131,7 +240,6 @@ export const AuthenticatedWorkspace: React.FC<{
       );
     }
 
-    // 3. Admin Queue
     if (isAdmin) {
       const { data: flagged } = await supabase
         .from('curriculum_materials')
@@ -145,18 +253,10 @@ export const AuthenticatedWorkspace: React.FC<{
             id: f.id,
             title: f.title,
             tagName: f.tag_name,
-            submitterId: f.submitted_by,
             submitterEmail: f.submitter_email || 'Unknown',
-            submitterNickname: f.submitter_nickname || 'Student',
             contentText: f.content_text,
-            status: f.status,
-            aiVerdictReason: f.ai_verdict_reason || 'Pending audit',
-            createdAt: new Date(f.created_at).toLocaleString([], {
-              month: 'short',
-              day: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit',
-            }),
+            aiVerdictReason: f.ai_verdict_reason || 'Pending admin audit',
+            createdAt: new Date(f.created_at).toLocaleDateString(),
           }))
         );
       }
@@ -180,12 +280,7 @@ export const AuthenticatedWorkspace: React.FC<{
     return () => clearInterval(interval);
   }, [currentView, quizTimeLeft]);
 
-  /* ==========================================================================
-     🛡️ СТРОГАЯ ИНДЕКСАЦИЯ С ЦЕНЗОРОМ (0 БАЙТ ПРИ REJECTED)
-     ========================================================================== */
-  /* ==========================================================================
-     🛡️ СТРОГАЯ ИНДЕКСАЦИЯ С ЦЕНЗОРОМ (0 БАЙТ ПРИ REJECTED)
-     ========================================================================== */
+  /* 🛡️ ИНДЕКСАЦИЯ С ЦЕНЗОРОМ */
   const indexSessionMaterial = async (
     files: AttachedFile[],
     customTitle: string,
@@ -196,8 +291,12 @@ export const AuthenticatedWorkspace: React.FC<{
   ): Promise<string> => {
     let finalTag = selectedTag;
 
-    // 1. Регистрируем тэг только для разрешенных материалов
-    if (aiDetectedTag && aiVerdict === 'approved') {
+    if (aiVerdict === 'rejected') {
+      console.warn(`[AI Guardrail] Material rejected by AI (${aiTitle}). Zero bytes saved to Supabase.`);
+      return finalTag;
+    }
+
+    if (aiDetectedTag) {
       const cleanTag = '#' + aiDetectedTag.trim().replace(/^#+/, '').replace(/\s+/g, '_');
       finalTag = cleanTag;
       await supabase.from('curriculum_tags').upsert({ name: cleanTag }, { onConflict: 'name' });
@@ -205,7 +304,6 @@ export const AuthenticatedWorkspace: React.FC<{
       setSelectedTag(cleanTag);
     }
 
-    // 2. Записываем в базу (Approved идет в библиотеку, а Rejected/Flagged идет в админку с ником и ID!)
     if (files && files.length > 0 && aiVerdict) {
       const fileName = files[0].name;
       const title = customTitle.trim() || aiTitle || fileName;
@@ -213,27 +311,20 @@ export const AuthenticatedWorkspace: React.FC<{
       await supabase.from('curriculum_materials').insert({
         submitted_by: user.id,
         submitter_email: user.email,
-        submitter_nickname: user.nickname || 'Student',
         title: title,
-        tag_name: finalTag || '#Unverified',
-        content_text: `[Source: ${categoryType} · ${fileName}]`,
-        status: aiVerdict, // 'approved', 'flagged' или 'rejected'
-        ai_verdict_reason: aiVerdict === 'rejected'
-          ? 'Automatic Guardrail: Non-academic or third-party vendor file rejected.'
-          : aiVerdict === 'flagged'
-          ? 'Flagged for admin audit: niche or unverified syllabus relevance.'
-          : `AI Approved for ${categoryType}.`,
+        tag_name: finalTag || '#General',
+        content_text: `[Source: ${categoryType} · ${fileName}]\nVerified by AI Guardrail.`,
+        status: aiVerdict,
+        ai_verdict_reason: aiVerdict === 'flagged'
+          ? 'Flagged for admin audit: niche, third-party software, or unverified curriculum relevance.'
+          : `AI Guardrail Approved for ${categoryType}.`,
       });
-
-      console.log(`[Audit Log] Material logged with status: ${aiVerdict}`);
     }
 
     return finalTag;
   };
 
-  /* ==========================================================================
-     QUIZ HANDLER (С ПРОВЕРКОЙ ЦЕНЗОРА)
-     ========================================================================== */
+  /* QUIZ HANDLER */
   const handleLaunchQuiz = async () => {
     const key = user.apiKey || localStorage.getItem('gemini_api_key');
     if (!key) return alert('Please enter your Google AI Studio API Key in Settings first!');
@@ -267,16 +358,13 @@ Allowed Formats: ${allowedFormats.join(', ')}
 User Custom Prompt: ${quizPrompt || 'Comprehensive module exam'}
 User Preferred Title: ${quizCustomTitle || 'None'}
 
-CRITICAL CURRICULUM AUDIT INSTRUCTION:
-1. Inspect any attached files above.
-   - If it is hardware vendor software/utilities (e.g. Dell SupportAssist, Intel, Nvidia), personal non-academic logs, install scripts, or memes -> contentVerdict = "rejected".
-   - If it is genuine Computer Science / Software Engineering teaching material (Java, Architecture, Buses, CDK, DevOps) -> contentVerdict = "approved".
-   - If borderline or unusual niche -> contentVerdict = "flagged".
-2. If genuine academic slides are attached, YOUR QUIZ MUST BE 100% STRICTLY BASED ON THE ATTACHED MATERIALS!
-3. If approved or flagged, reuse an existing tag from the database list whenever applicable, or generate a clean hashtag starting with '#' (e.g. #Comp_Org_Buses, #Java_Arrays).
+CRITICAL AUDIT INSTRUCTIONS:
+1. Inspect attached files: If vendor software (Dell, Intel), installers, or memes -> contentVerdict = "rejected". If legitimate CS learning material -> contentVerdict = "approved". If niche -> contentVerdict = "flagged".
+2. If genuine slides attached, QUIZ MUST BE 100% STRICTLY BASED ON THE ATTACHED MATERIALS!
+3. If approved/flagged, reuse an existing tag from the database or create a new hashtag starting with '#' (e.g. #Comp_Org_Buses).
 
 Task: Generate exactly ${questionCount} questions.
-Output strictly as JSON without markdown wrapping:
+Output strictly as JSON without markdown:
 {
   "title": "string (Academic Test Title)",
   "contentVerdict": "approved" | "flagged" | "rejected",
@@ -299,7 +387,6 @@ Output strictly as JSON without markdown wrapping:
     try {
       const data = await callGemini(key, requestParts, quizThinkingMode);
 
-      // 🛡️ Сохраняем в базу ТОЛЬКО если не rejected:
       await indexSessionMaterial(
         quizAttachedFiles,
         quizCustomTitle,
@@ -369,11 +456,12 @@ Output strictly as JSON without markdown wrapping:
     });
 
     const finalScore = Math.round((scoreTotal / activeQuiz.questions.length) * 100);
+    const earnedPoints = calculatePoints(finalScore, 'Standard');
 
     const wrongQuestions = reviewDetails.filter((r) => !r.isCorrect);
     let weakSpotsAdvice = 'Excellent performance! You mastered all tested concepts.';
     if (wrongQuestions.length > 0) {
-      weakSpotsAdvice = `Review topics: ${wrongQuestions.map((w, idx) => `Q${idx + 1} (${w.questionText.slice(0, 50)}...)`).join('; ')}. Re-examine the corresponding lecture slides!`;
+      weakSpotsAdvice = `Review topics: ${wrongQuestions.map((w, idx) => `Q${idx + 1} (${w.questionText.slice(0, 50)}...)`).join('; ')}. Re-examine corresponding lecture slides!`;
     }
 
     const payloadFeedback = JSON.stringify({
@@ -389,6 +477,7 @@ Output strictly as JSON without markdown wrapping:
       type: 'Quiz',
       score: finalScore,
       max_score: 100,
+      points_earned: earnedPoints,
       time_spent: `${activeQuiz.timeLimit}m`,
       ai_feedback: payloadFeedback,
     });
@@ -398,8 +487,9 @@ Output strictly as JSON without markdown wrapping:
     setCurrentView('quiz_results');
   };
 
+  /* PROGRAMMING HANDLER */
   /* ==========================================================================
-     PROGRAMMING HANDLER (С ПРОВЕРКОЙ ЦЕНЗОРА)
+     PROGRAMMING HANDLER (ЧЕТКИЕ ИНСТРУКЦИИ И СПЕЦИФИКАЦИИ)
      ========================================================================== */
   const handleLaunchProgramming = async () => {
     const key = user.apiKey || localStorage.getItem('gemini_api_key');
@@ -418,37 +508,40 @@ Output strictly as JSON without markdown wrapping:
     });
 
     const promptText = `
-You are the software architect and academic auditor for ISE University of Limerick.
+You are the Software Construction Professor for ISE (Immersive Software Engineering) at University of Limerick.
 Curriculum Context: ${yearPrompts[currentYear]}
 Difficulty Level: ${progDifficulty}
-Target Tag: ${selectedTag || '#Java_OOP'}
-Existing Curriculum Tags in Database: [${availableTags.join(', ')}]
+Target Tag: ${selectedTag || '#Java_Core'}
 User Custom Title: ${progCustomTitle || 'None'}
-User Focus Prompt: ${progPrompt || 'Practical programming challenge'}
+User Focus Prompt: ${progPrompt || 'Practical Java programming challenge'}
 
-AUDIT RULE:
-- If attached files are vendor utilities (Dell, Intel), installers, or non-educational memes -> contentVerdict = "rejected".
-- If legitimate computer science teaching materials -> contentVerdict = "approved".
-- If niche/unverified -> contentVerdict = "flagged".
+TASK: Generate an unambiguous, structured Java Lab Exercise with crystal-clear specifications.
 
-TASK: Generate a structured Java Lab Exercise matching university lab standards (Objective, Key Requirements, Pattern Rules, Example Output).
-Output strictly as JSON without markdown wrapping:
+REQUIREMENTS FOR TASK GENERATION:
+1. Title: Clear academic title.
+2. Objective: 2-3 concise sentences stating exactly what the student must build.
+3. Requirements: A numbered list of EXACT implementation steps (e.g. 1. User Input, 2. Outer Loop, 3. Inner Loop, 4. Output Formatting).
+4. Pattern Rules: Explicit rules for edge cases and layout (e.g. leading spaces, star counts).
+5. Example Output: Realistic, exact stdout terminal output.
+6. Starter Code: Working boilerplate with imports and \`public class Solution\`.
+
+Output strictly as JSON without markdown:
 {
-  "title": "string (Lab Exercise Title)",
+  "title": "string",
   "contentVerdict": "approved" | "flagged" | "rejected",
-  "detectedTag": "string (e.g. #Java_OOP)",
+  "detectedTag": "string (e.g. #Java_Nested_Loops)",
   "language": "Java",
-  "objective": "string (In this exercise, you will build...)",
+  "objective": "string",
   "requirements": [
-    "1. Key requirement item...",
-    "2. Another requirement..."
+    "1. Requirement...",
+    "2. Requirement..."
   ],
   "patternRules": [
-    "Rule 1...",
-    "Rule 2..."
+    "Task A: ...",
+    "Task B: ..."
   ],
-  "exampleOutput": "string (Expected output)",
-  "starterCode": "public class Solution {\\n    public static void main(String[] args) {\\n        // TODO\\n    }\\n}"
+  "exampleOutput": "string",
+  "starterCode": "import java.util.Scanner;\\n\\npublic class Solution {\\n    public static void main(String[] args) {\\n        Scanner scanner = new Scanner(System.in);\\n        // TODO\\n    }\\n}"
 }
 `;
     requestParts.push({ text: promptText });
@@ -456,7 +549,6 @@ Output strictly as JSON without markdown wrapping:
     try {
       const data = await callGemini(key, requestParts, progThinkingMode);
 
-      // 🛡️ Сохраняем в базу ТОЛЬКО если не rejected:
       await indexSessionMaterial(
         progAttachedFiles,
         progCustomTitle,
@@ -479,29 +571,54 @@ Output strictly as JSON without markdown wrapping:
     }
   };
 
+  /* ==========================================================================
+     СПРАВЕДЛИВАЯ ОЦЕНКА КОДА ПО 4-УРОВНЕВОМУ РУБРИКАТОРУ
+     ========================================================================== */
   const handleSubmitProgramming = async () => {
     const key = user.apiKey || localStorage.getItem('gemini_api_key');
     if (!activeProg || !key) return;
 
     setIsGenerating(true);
+
     const evalPrompt = `
-You are the code examiner for ISE UL.
-Problem: ${activeProg.title}
-Requirements: ${activeProg.requirements?.join(' ')}
-Student Code:
+You are the Senior Code Evaluator for ISE (Immersive Software Engineering) at University of Limerick.
+
+PROBLEM CONTEXT:
+Title: ${activeProg.title}
+Objective: ${activeProg.objective}
+Requirements: ${activeProg.requirements?.join(' | ')}
+Pattern Rules: ${activeProg.patternRules?.join(' | ')}
+Expected Output Sample:
+${activeProg.exampleOutput}
+
+STUDENT SUBMITTED CODE:
 \`\`\`${activeProg.language}
 ${studentCodeInput}
 \`\`\`
 
-Strict Grading (0 to 100). Blank/boilerplate = 0. Partial points for logic, loop bounds, and output match.
+GRADING RUBRIC (Total 100 Points):
+1. Core Logic & Algorithm (40 pts): Did the student build the correct loop structure, conditional logic, and algorithmic flow?
+2. Output Fidelity (30 pts): Does the logic produce the intended pattern/results?
+3. Syntax & Variable Handling (20 pts): Valid Java syntax, types, initialization (e.g. \`int x = 0\`), scanner usage.
+4. Clean Code & Style (10 pts): Readable formatting, naming conventions.
+
+CRITICAL FAIRNESS RULES:
+- DO NOT fail the entire submission or assign 0-20 points for minor syntax slips (e.g. declaring \`int x;\` without immediate initialization or minor off-by-one bounds). Minor syntax slips only deduct 5-10 points in the Syntax section!
+- Award full or high points for Logic (40 pts) if the nested loop mechanism or algorithm is conceptually sound.
+- If code is completely blank or only unmodified starter boilerplate -> Score = 0.
+- Provide constructive, encouraging feedback with an explicit breakdown of points earned per section.
+- Make sure to provide a highly detailed output explaining where the student has made an error, how to fix it, what are the consequences and what better approaches he may take next time to optimize the code and get a higher mark.
+
 Output strictly as JSON without markdown:
 {
   "score": integer (0 to 100),
-  "feedback": "string (Detailed rubric diagnosis)"
+  "feedback": "string (Structured feedback: Logic: X/40, Output: Y/30, Syntax: Z/20, Style: W/10. Specific line-by-line advice and corrections)"
 }
 `;
+
     try {
       const result = await callGemini(key, evalPrompt, true);
+      const earnedPoints = calculatePoints(result.score, progDifficulty);
       const fullTitle = `${selectedTag ? selectedTag + ' · ' : ''}${activeProg.title}`;
 
       await supabase.from('test_history').insert({
@@ -510,6 +627,7 @@ Output strictly as JSON without markdown:
         type: 'Code Challenge',
         score: result.score,
         max_score: 100,
+        points_earned: earnedPoints,
         time_spent: 'Completed',
         ai_feedback: result.feedback,
       });
@@ -524,9 +642,7 @@ Output strictly as JSON without markdown:
     }
   };
 
-  /* ==========================================================================
-     ANALYSIS HANDLER (С ПРОВЕРКОЙ ЦЕНЗОРА)
-     ========================================================================== */
+  /* ANALYSIS HANDLER */
   const handleLaunchAnalysis = async () => {
     const key = user.apiKey || localStorage.getItem('gemini_api_key');
     if (!key) return alert('Enter Gemini API key in Settings!');
@@ -555,7 +671,7 @@ Context: ${analysisPrompt || 'Nested loop execution drill based on attached mate
 AUDIT RULE:
 - If attached files are vendor utilities (Dell, Intel), installers, or non-educational memes -> contentVerdict = "rejected".
 - If legitimate computer science teaching materials -> contentVerdict = "approved".
-- If niche/unverified -> contentVerdict = "flagged".
+- If niche -> contentVerdict = "flagged".
 
 Task: Generate a brain-twister "Mental Code Tracing" puzzle with nested loops and mutating counters.
 Output strictly as JSON without markdown:
@@ -574,7 +690,6 @@ Output strictly as JSON without markdown:
     try {
       const data = await callGemini(key, requestParts, analysisThinkingMode);
 
-      // 🛡️ Сохраняем в базу ТОЛЬКО если не rejected:
       await indexSessionMaterial(
         analysisAttachedFiles,
         analysisCustomTitle,
@@ -627,6 +742,7 @@ Output strictly as JSON without markdown:
     try {
       const result = await callGemini(key, evalPrompt, false);
       const finalScore = isExactMatch ? 100 : result.score;
+      const earnedPoints = calculatePoints(finalScore, analysisDifficulty);
       const fullTitle = `${selectedTag ? selectedTag + ' · ' : ''}${activeAnalysis.title}`;
 
       await supabase.from('test_history').insert({
@@ -635,6 +751,7 @@ Output strictly as JSON without markdown:
         type: 'Mental Code Tracing',
         score: finalScore,
         max_score: 100,
+        points_earned: earnedPoints,
         time_spent: 'Completed',
         ai_feedback: result.feedback,
       });
@@ -649,9 +766,7 @@ Output strictly as JSON without markdown:
     }
   };
 
-  /* ==========================================================================
-     UPLOAD HANDLER (С БЕЗКОМПРОМИССНЫМ ЦЕНЗОРОМ)
-     ========================================================================== */
+  /* UPLOAD HANDLER */
   const handleUploadWithAiAudit = async () => {
     const key = user.apiKey || localStorage.getItem('gemini_api_key');
     if (!key) return alert('Enter Gemini API key in Settings!');
@@ -676,23 +791,22 @@ CRITICAL AUDIT INSTRUCTIONS:
    - Any personal files, non-academic system logs, config dumps, or arbitrary executable scripts.
    - Any memes, jokes, or non-educational content.
 2. ALLOW (verdict = "approved"):
-   - ONLY genuine academic Computer Science / Software Engineering teaching materials (lecture slides, lab exercise descriptions, code algorithms in Java/TS/Rust/Python, database schemas, exam revision notes).
+   - ONLY genuine academic Computer Science / Software Engineering teaching materials.
 3. If valid but weird/niche -> verdict = "flagged" for admin manual audit.
-4. Tag Generation: First inspect "Existing Curriculum Tags in Database". If the content matches an existing tag, YOU MUST REUSE IT. Do not invent slight spelling variations. Otherwise create a concise tag starting with '#' (e.g. #Comp_Org_Buses, #Java_OOP).
+4. Tag Generation: First inspect "Existing Curriculum Tags in Database". If content matches an existing tag, REUSE IT. Do not invent slight spelling variations. Otherwise create a concise tag starting with '#' (e.g. #Comp_Org_Buses, #Java_OOP).
 
 Output strictly as JSON without markdown:
 {
   "verdict": "approved" | "flagged" | "rejected",
   "tagName": "string (starts with #, max 25 chars)",
   "title": "string",
-  "reason": "string (concise reason why approved, flagged, or rejected)",
+  "reason": "string",
   "cleanSummary": "string"
 }
 `;
     try {
       const result = await callGemini(key, promptText, false);
 
-      // ⛔ ЕСЛИ ОТКЛОНЕНО — В БАЗУ НЕ ПИШЕМ РОВНО НИЧЕГО!
       if (result.verdict === 'rejected') {
         setUploadStatus(`❌ Rejected: ${result.reason} (Zero records saved).`);
         return;
@@ -702,7 +816,6 @@ Output strictly as JSON without markdown:
         await handleAddNewTag(result.tagName);
       }
 
-      // Сохраняем ТОЛЬКО approved или flagged
       const { error } = await supabase.from('curriculum_materials').insert({
         submitted_by: user.id,
         submitter_email: user.email,
@@ -728,6 +841,16 @@ Output strictly as JSON without markdown:
     if (action === 'approve') await supabase.from('curriculum_materials').update({ status: 'approved' }).eq('id', id);
     else await supabase.from('curriculum_materials').delete().eq('id', id);
     loadData();
+  };
+
+  const handleConsentAccepted = async (realName?: string) => {
+    await supabase.from('profiles').update({
+      leaderboard_accepted: true,
+      real_name: realName || null,
+    }).eq('id', user.id);
+    user.leaderboardAccepted = true;
+    if (realName) user.realName = realName;
+    fetchLeaderboardData();
   };
 
   /* RENDER ACTIVE RUNNERS */
@@ -796,7 +919,15 @@ Output strictly as JSON without markdown:
           <div className="flex items-center gap-2.5">
             <img src="/favicon.svg" alt="revISE Logo" className="h-6 w-6 shrink-0 object-contain" />
             <h1 className="text-2xl font-black text-white leading-none flex items-center">
-              <span>rev</span><span className="text-[#3ccb57]">ISE</span>&nbsp;<span>Learning Station</span>
+              <span>rev</span><span className="text-[#3ccb57]">ISE</span>
+              <span className="text-slate-500 font-normal mx-2 text-lg">·</span>
+              <span
+                onClick={handleShuffleSubtitle}
+                title="Click to roll another tagline!"
+                className="text-slate-200 font-semibold cursor-pointer hover:text-[#3ccb57] transition-colors select-none"
+              >
+                {subtitle}
+              </span>
             </h1>
             <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-full bg-[#3ccb57]/10 text-[10px] font-mono text-[#3ccb57] uppercase font-bold border border-[#3ccb57]/30 leading-none">
               {currentYear.toUpperCase()}
@@ -811,7 +942,10 @@ Output strictly as JSON without markdown:
         <div className="flex items-center gap-2">
           {isAdmin && (
             <button
-              onClick={() => setActiveModal('admin')}
+              onClick={() => {
+                loadData();
+                setActiveModal('admin');
+              }}
               className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-amber-300 bg-amber-950/30 hover:bg-amber-950/50 border border-amber-500/40 rounded-xl cursor-pointer"
             >
               <Shield className="h-3.5 w-3.5" />
@@ -819,8 +953,23 @@ Output strictly as JSON without markdown:
             </button>
           )}
 
+          {/* 🏆 КНОПКА ЛИДЕРБОРДА */}
           <button
-            onClick={() => { loadData(); setActiveModal('history'); }}
+            onClick={() => {
+              fetchLeaderboardData();
+              setActiveModal('leaderboard');
+            }}
+            className="px-3.5 py-2 text-xs font-semibold bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl flex items-center gap-1.5 cursor-pointer shadow-sm hover:border-[#3ccb57]/40 text-slate-200 hover:text-white"
+          >
+            <Trophy className="h-3.5 w-3.5 text-[#3ccb57]" />
+            <span>Leaderboard</span>
+          </button>
+
+          <button
+            onClick={() => {
+              loadData();
+              setActiveModal('history');
+            }}
             className="px-3.5 py-2 text-xs font-semibold bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl flex items-center gap-1.5 cursor-pointer shadow-sm"
           >
             <History className="h-3.5 w-3.5 text-[#3ccb57]" />
@@ -843,45 +992,63 @@ Output strictly as JSON without markdown:
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* CARD 1: Quiz Test */}
-        <div onClick={() => setActiveModal('quiz')} className="group relative rounded-2xl border border-white/10 bg-[#060c20]/80 hover:border-sky-400/50 p-7 flex flex-col justify-between aspect-square cursor-pointer backdrop-blur-xl transition-all">
-          <div className="absolute top-5 right-5 flex items-center">
-            <span className="h-2.5 w-2.5 rounded-full bg-sky-400 shadow-[0_0_10px_#38bdf8]" />
+        <div onClick={() => setActiveModal('quiz')} className="group relative rounded-3xl border border-white/10 bg-[#060c20]/85 hover:border-sky-400/50 p-8 lg:p-9 flex flex-col justify-between min-h-[330px] lg:min-h-[360px] cursor-pointer backdrop-blur-xl transition-all duration-300 shadow-2xl hover:shadow-[0_0_40px_rgba(56,189,248,0.2)] hover:-translate-y-1.5">
+          <div className="absolute top-6 right-6 flex items-center">
+            <span className="h-3.5 w-3.5 rounded-full bg-sky-400 shadow-[0_0_15px_#38bdf8]" />
           </div>
 
           <div>
-            <div className="h-12 w-12 rounded-xl bg-sky-400/10 text-sky-400 flex items-center justify-center mb-4"><Brain className="h-6 w-6" /></div>
-            <h2 className="text-xl font-bold text-white">Quiz Test</h2>
-            <p className="text-xs text-slate-400 mt-2">Dynamic timed tests with single/multiple choice options and strict or partial credit.</p>
+            <div className="h-16 w-16 rounded-2xl bg-sky-400/10 text-sky-400 flex items-center justify-center mb-6 border border-sky-400/20 group-hover:scale-110 transition-transform">
+              <Brain className="h-8 w-8" />
+            </div>
+            <h2 className="text-2xl lg:text-3xl font-black text-white tracking-tight">Quiz Test</h2>
+            <p className="text-sm lg:text-base text-slate-300 mt-3 leading-relaxed font-normal">
+              Dynamic timed tests with single/multiple choice options, deep reasoning, and strict or partial credit.
+            </p>
           </div>
-          <span className="text-xs text-sky-400 font-semibold group-hover:underline">Launch Quiz →</span>
+          <div className="pt-4 border-t border-white/5 flex items-center justify-between">
+            <span className="text-sm lg:text-base text-sky-400 font-bold group-hover:underline">Launch Quiz →</span>
+          </div>
         </div>
 
         {/* CARD 2: Programming Exercises */}
-        <div onClick={() => setActiveModal('programming')} className="group relative rounded-2xl border border-white/10 bg-[#060c20]/80 hover:border-[#3ccb57]/50 p-7 flex flex-col justify-between aspect-square cursor-pointer backdrop-blur-xl transition-all">
-          <div className="absolute top-5 right-5 flex items-center">
-            <span className="h-2.5 w-2.5 rounded-full bg-[#3ccb57] shadow-[0_0_10px_#3ccb57]" />
+        <div onClick={() => setActiveModal('programming')} className="group relative rounded-3xl border border-white/10 bg-[#060c20]/85 hover:border-[#3ccb57]/50 p-8 lg:p-9 flex flex-col justify-between min-h-[330px] lg:min-h-[360px] cursor-pointer backdrop-blur-xl transition-all duration-300 shadow-2xl hover:shadow-[0_0_40px_rgba(60,203,87,0.2)] hover:-translate-y-1.5">
+          <div className="absolute top-6 right-6 flex items-center">
+            <span className="h-3.5 w-3.5 rounded-full bg-[#3ccb57] shadow-[0_0_15px_#3ccb57]" />
           </div>
 
           <div>
-            <div className="h-12 w-12 rounded-xl bg-[#3ccb57]/10 text-[#3ccb57] flex items-center justify-center mb-4"><Code2 className="h-6 w-6" /></div>
-            <h2 className="text-xl font-bold text-white">Programming Exercises</h2>
-            <p className="text-xs text-slate-400 mt-2">Structured Java lab exercises with objectives, requirements, and example outputs.</p>
+            <div className="h-16 w-16 rounded-2xl bg-[#3ccb57]/10 text-[#3ccb57] flex items-center justify-center mb-6 border border-[#3ccb57]/20 group-hover:scale-110 transition-transform">
+              <Code2 className="h-8 w-8" />
+            </div>
+            <h2 className="text-2xl lg:text-3xl font-black text-white tracking-tight">Programming Exercises</h2>
+            <p className="text-sm lg:text-base text-slate-300 mt-3 leading-relaxed font-normal">
+              Structured Java lab exercises with objectives, requirements, pattern rules, and example outputs.
+            </p>
           </div>
-          <span className="text-xs text-[#3ccb57] font-semibold group-hover:underline">Write Code →</span>
+          <div className="pt-4 border-t border-white/5 flex items-center justify-between">
+            <span className="text-sm lg:text-base text-[#3ccb57] font-bold group-hover:underline">Write Code →</span>
+          </div>
         </div>
 
         {/* CARD 3: Code Analysis */}
-        <div onClick={() => setActiveModal('analysis')} className="group relative rounded-2xl border border-white/10 bg-[#060c20]/80 hover:border-orange-400/50 p-7 flex flex-col justify-between aspect-square cursor-pointer backdrop-blur-xl transition-all">
-          <div className="absolute top-5 right-5 flex items-center">
-            <span className="h-2.5 w-2.5 rounded-full bg-orange-400 shadow-[0_0_10px_#fb923c]" />
+        <div onClick={() => setActiveModal('analysis')} className="group relative rounded-3xl border border-white/10 bg-[#060c20]/85 hover:border-orange-400/50 p-8 lg:p-9 flex flex-col justify-between min-h-[330px] lg:min-h-[360px] cursor-pointer backdrop-blur-xl transition-all duration-300 shadow-2xl hover:shadow-[0_0_40px_rgba(251,146,60,0.2)] hover:-translate-y-1.5">
+          <div className="absolute top-6 right-6 flex items-center">
+            <span className="h-3.5 w-3.5 rounded-full bg-orange-400 shadow-[0_0_15px_#fb923c]" />
           </div>
 
           <div>
-            <div className="h-12 w-12 rounded-xl bg-orange-400/10 text-orange-400 flex items-center justify-center mb-4"><Bug className="h-6 w-6" /></div>
-            <h2 className="text-xl font-bold text-white">Code Analysis</h2>
-            <p className="text-xs text-slate-400 mt-2">Mental execution drills! Convoluted nested loops and tracing without a compiler.</p>
+            <div className="h-16 w-16 rounded-2xl bg-orange-400/10 text-orange-400 flex items-center justify-center mb-6 border border-orange-400/20 group-hover:scale-110 transition-transform">
+              <Bug className="h-8 w-8" />
+            </div>
+            <h2 className="text-2xl lg:text-3xl font-black text-white tracking-tight">Code Analysis</h2>
+            <p className="text-sm lg:text-base text-slate-300 mt-3 leading-relaxed font-normal">
+              Mental execution drills! Convoluted nested loops, variable mutations, and tracing without a compiler.
+            </p>
           </div>
-          <span className="text-xs text-orange-400 font-semibold group-hover:underline">Analyze Code →</span>
+          <div className="pt-4 border-t border-white/5 flex items-center justify-between">
+            <span className="text-sm lg:text-base text-orange-400 font-bold group-hover:underline">Analyze Code →</span>
+          </div>
         </div>
       </div>
 
@@ -900,6 +1067,15 @@ Output strictly as JSON without markdown:
       </button>
 
       {/* MODALS */}
+      <LeaderboardModal
+        isOpen={activeModal === 'leaderboard'}
+        onClose={() => setActiveModal('none')}
+        user={user}
+        leaderboardEntries={leaderboardEntries}
+        onConsentAccepted={handleConsentAccepted}
+        isLoading={isLoadingLeaderboard}
+      />
+
       <QuizModal
         isOpen={activeModal === 'quiz'}
         onClose={() => setActiveModal('none')}
@@ -998,8 +1174,10 @@ Output strictly as JSON without markdown:
         isOpen={activeModal === 'settings'}
         onClose={() => setActiveModal('none')}
         user={user}
-        onNicknameUpdated={(newNick) => {
-          user.nickname = newNick;
+        onProfileUpdated={(updates) => {
+          if (updates.nickname) user.nickname = updates.nickname;
+          if (updates.realName !== undefined) user.realName = updates.realName;
+          if (updates.hideFromLeaderboard !== undefined) user.hideFromLeaderboard = updates.hideFromLeaderboard;
         }}
         currentYear={currentYear}
         onYearChange={async (yr) => {

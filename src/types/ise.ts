@@ -1,13 +1,16 @@
 export type StudyYear = 'year1' | 'year2' | 'year3' | 'year4';
 export type AuthMode = 'signin' | 'signup';
-export type ActiveModal = 'none' | 'quiz' | 'programming' | 'analysis' | 'upload' | 'history' | 'settings' | 'admin';
+export type ActiveModal = 'none' | 'quiz' | 'programming' | 'analysis' | 'upload' | 'history' | 'settings' | 'admin' | 'leaderboard';
 export type AppView = 'station' | 'active_quiz' | 'quiz_results' | 'active_prog' | 'prog_results' | 'active_analysis' | 'analysis_results';
 
 export interface UserSession {
   id: string;
   email: string;
   nickname?: string;
+  realName?: string;
   studyYear?: StudyYear;
+  hideFromLeaderboard?: boolean;
+  leaderboardAccepted?: boolean;
   apiKey?: string;
 }
 
@@ -36,12 +39,25 @@ export interface TestHistoryItem {
   type: string;
   score: number;
   maxScore: number;
+  pointsEarned: number;
   date: string;
-  rawDate: string; // ISO string for calendar matching
+  rawDate: string;
   timeSpent: string;
   aiFeedback: string;
   weakSpotsAdvice?: string;
   details?: QuestionReviewDetail[];
+}
+
+export interface LeaderboardEntry {
+  userId: string;
+  rank: number;
+  nickname: string;
+  realName?: string;
+  studyYear: StudyYear;
+  monthlyAccuracy: number;
+  isePoints: number;
+  totalScore: number;
+  isCurrentUser: boolean;
 }
 
 export interface QuizQuestion {
