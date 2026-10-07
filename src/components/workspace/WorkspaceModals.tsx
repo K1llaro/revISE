@@ -6,7 +6,7 @@ import {
   EyeOff, Eye, Sparkles, Filter
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-import type { AttachedFile, FlaggedMaterial, StudyYear, TestHistoryItem, QuestionReviewDetail, LeaderboardEntry, UserSession } from '../../types/ise';
+import type { AttachedFile, FlaggedMaterial, StudyYear, TestHistoryItem, QuestionReviewDetail, LeaderboardEntry, UserSession, StudyMaterial } from '../../types/ise';
 import { FileDropzone, ApiKeyTooltip } from '../common/LayoutComponents';
 
 /* ==========================================================================
@@ -173,8 +173,8 @@ export const QuizModal: React.FC<{
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
-      <div className="w-full max-w-5xl rounded-2xl border border-white/10 bg-[#060c20] p-7 space-y-5 max-h-[92vh] overflow-y-auto shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-fade-in">
+      <div className="w-full max-w-5xl rounded-2xl border border-white/10 bg-[#060c20] p-4 sm:p-6 lg:p-7 space-y-4 sm:space-y-5 max-h-[92vh] overflow-y-auto shadow-2xl">
         <div className="flex justify-between items-center border-b border-white/10 pb-4">
           <h3 className="text-lg font-bold text-white flex items-center gap-2">
             <Brain className="h-5 w-5 text-[#3ccb57]" /> Configure Quiz Examination
@@ -401,8 +401,8 @@ export const ProgrammingModal: React.FC<{
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
-      <div className="w-full max-w-5xl rounded-2xl border border-white/10 bg-[#060c20] p-7 space-y-5 max-h-[92vh] overflow-y-auto shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-fade-in">
+      <div className="w-full max-w-5xl rounded-2xl border border-white/10 bg-[#060c20] p-4 sm:p-6 lg:p-7 space-y-4 sm:space-y-5 max-h-[92vh] overflow-y-auto shadow-2xl">
         <div className="flex justify-between items-center border-b border-white/10 pb-4">
           <h3 className="text-lg font-bold text-white flex items-center gap-2">
             <Code2 className="h-5 w-5 text-[#3ccb57]" /> Configure Programming Challenge
@@ -424,13 +424,13 @@ export const ProgrammingModal: React.FC<{
 
         <div>
           <label className="block text-xs font-semibold text-slate-300 mb-1.5">Select Difficulty</label>
-          <div className="grid grid-cols-5 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
             {['Very Easy', 'Easy', 'Standard', 'Hard', 'Challenge'].map((lvl) => (
               <button
                 key={lvl}
                 type="button"
                 onClick={() => setProgDifficulty(lvl)}
-                className={`py-2 text-center rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+                className={`py-2 px-2 text-center rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
                   progDifficulty === lvl ? 'bg-[#3ccb57] text-black border-[#3ccb57] font-bold' : 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/10'
                 }`}
               >
@@ -508,8 +508,8 @@ export const AnalysisModal: React.FC<{
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
-      <div className="w-full max-w-5xl rounded-2xl border border-white/10 bg-[#060c20] p-7 space-y-5 max-h-[92vh] overflow-y-auto shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-fade-in">
+      <div className="w-full max-w-5xl rounded-2xl border border-white/10 bg-[#060c20] p-4 sm:p-6 lg:p-7 space-y-4 sm:space-y-5 max-h-[92vh] overflow-y-auto shadow-2xl">
         <div className="flex justify-between items-center border-b border-white/10 pb-4">
           <h3 className="text-lg font-bold text-white flex items-center gap-2">
             <Bug className="h-5 w-5 text-[#3ccb57]" /> Configure Code Analysis & Mental Tracing
@@ -531,13 +531,13 @@ export const AnalysisModal: React.FC<{
 
         <div>
           <label className="block text-xs font-semibold text-slate-300 mb-1.5">Select Complexity</label>
-          <div className="grid grid-cols-5 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
             {['Very Easy', 'Easy', 'Standard', 'Hard', 'Challenge'].map((lvl) => (
               <button
                 key={lvl}
                 type="button"
                 onClick={() => setAnalysisDifficulty(lvl)}
-                className={`py-2 text-center rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+                className={`py-2 px-2 text-center rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
                   analysisDifficulty === lvl ? 'bg-[#3ccb57] text-black border-[#3ccb57] font-bold' : 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/10'
                 }`}
               >
@@ -607,8 +607,8 @@ export const UploadModal: React.FC<{
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
-      <div className="w-full max-w-5xl rounded-2xl border border-white/10 bg-[#060c20] p-7 space-y-5 max-h-[92vh] overflow-y-auto shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-fade-in">
+      <div className="w-full max-w-5xl rounded-2xl border border-white/10 bg-[#060c20] p-4 sm:p-6 lg:p-7 space-y-4 sm:space-y-5 max-h-[92vh] overflow-y-auto shadow-2xl">
         <div className="flex justify-between items-center border-b border-white/10 pb-4">
           <h3 className="text-lg font-bold text-white flex items-center gap-2">
             <Upload className="h-5 w-5 text-[#3ccb57]" /> Ingest Lecture Notes & Generate Curriculum Tags
@@ -677,17 +677,17 @@ export const LeaderboardModal: React.FC<{
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in text-left">
-      <div className="w-full max-w-6xl rounded-2xl border border-white/10 bg-[#060c20] p-7 space-y-6 max-h-[92vh] overflow-y-auto shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-fade-in text-left">
+      <div className="w-full max-w-6xl rounded-2xl border border-white/10 bg-[#060c20] p-4 sm:p-6 lg:p-7 space-y-4 sm:space-y-6 max-h-[92vh] overflow-y-auto shadow-2xl">
         
         {!hasAcceptedConsent ? (
-          <div className="max-w-xl mx-auto py-6 space-y-6 text-center animate-fade-in">
-            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-[#3ccb57]/10 text-[#3ccb57] border border-[#3ccb57]/30 shadow-[0_0_20px_rgba(60,203,87,0.2)]">
-              <Trophy className="h-8 w-8 animate-pulse" />
+          <div className="max-w-xl mx-auto py-4 sm:py-6 space-y-5 sm:space-y-6 text-center animate-fade-in">
+            <div className="mx-auto flex h-14 w-14 sm:h-16 sm:w-16 items-center justify-center rounded-2xl bg-[#3ccb57]/10 text-[#3ccb57] border border-[#3ccb57]/30 shadow-[0_0_20px_rgba(60,203,87,0.2)]">
+              <Trophy className="h-7 w-7 sm:h-8 sm:w-8 animate-pulse" />
             </div>
 
             <div>
-              <h3 className="text-2xl font-black text-white">Join the revISE Leaderboard</h3>
+              <h3 className="text-xl sm:text-2xl font-black text-white">Join the revISE Leaderboard</h3>
               <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
                 Compete with fellow Immersive Software Engineering students, track your unbounded mastery index, and climb the ranks.
               </p>
@@ -698,8 +698,8 @@ export const LeaderboardModal: React.FC<{
                 <Shield className="h-4 w-4 text-[#3ccb57]" /> Leaderboard Privacy & Fairness Rules:
               </p>
               <ul className="list-disc pl-4 space-y-1 text-slate-400 text-[11px]">
-                <li>Your nickname, year, monthly accuracy %, and ISE Points will be public to UL peers.</li>
-                <li>Hard & Challenge tasks award up to 250 XP with difficulty multipliers.</li>
+                <li>Your nickname, year, monthly accuracy %, and Experience will be public to UL peers.</li>
+                <li>Hard & Challenge tasks award up to 250 Exp with difficulty multipliers.</li>
                 <li>Real Name & Surname are strictly optional.</li>
                 <li>You can toggle <strong>«Hide myself from Leaderboard»</strong> anytime in Settings.</li>
               </ul>
@@ -718,7 +718,7 @@ export const LeaderboardModal: React.FC<{
               />
             </div>
 
-            <div className="pt-2 flex gap-3 justify-center">
+            <div className="pt-2 flex flex-col sm:flex-row gap-2.5 sm:gap-3 justify-center">
               <button
                 type="button"
                 onClick={onClose}
@@ -740,15 +740,15 @@ export const LeaderboardModal: React.FC<{
           </div>
         ) : (
           <>
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-white/10 pb-4">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4 border-b border-white/10 pb-4">
               <div className="flex items-center gap-2.5">
-                <Trophy className="h-6 w-6 text-[#3ccb57]" />
+                <Trophy className="h-6 w-6 text-[#3ccb57] shrink-0" />
                 <div>
-                  <h3 className="text-xl font-black text-white">revISE Leaderboard</h3>
-                  <p className="text-xs text-slate-400 font-mono">Unbounded Rating = Total ISE Points × (Monthly Accuracy % / 100)</p>
+                  <h3 className="text-lg sm:text-xl font-black text-white">revISE Leaderboard</h3>
+                  <p className="text-[11px] sm:text-xs text-slate-400 font-mono">Unbounded Rating = Total Exp × (Monthly Accuracy % / 100)</p>
                 </div>
               </div>
-              <button onClick={onClose} className="text-slate-400 hover:text-white p-1 cursor-pointer"><X className="h-5 w-5" /></button>
+              <button onClick={onClose} className="text-slate-400 hover:text-white p-1 cursor-pointer self-end sm:self-auto"><X className="h-5 w-5" /></button>
             </div>
 
             <div className="flex flex-col md:flex-row justify-between items-center gap-3">
@@ -788,16 +788,16 @@ export const LeaderboardModal: React.FC<{
               </div>
             </div>
 
-            <div className="border border-white/10 rounded-2xl overflow-hidden bg-black/40">
-              <table className="w-full text-left border-collapse">
+            <div className="border border-white/10 rounded-2xl overflow-x-auto bg-black/40 scrollbar-thin">
+              <table className="w-full min-w-[520px] text-left border-collapse">
                 <thead>
-                  <tr className="border-b border-white/10 bg-white/[0.02] text-[11px] font-mono font-bold text-slate-400 uppercase tracking-wider">
-                    <th className="py-3.5 px-4 w-16 text-center">Rank</th>
-                    <th className="py-3.5 px-4">Student</th>
-                    <th className="py-3.5 px-4">Real Name</th>
-                    <th className="py-3.5 px-4 text-center">Monthly Accuracy</th>
-                    <th className="py-3.5 px-4 text-center">ISE Points</th>
-                    <th className="py-3.5 px-4 text-right font-black text-[#3ccb57]">Total Rating</th>
+                  <tr className="border-b border-white/10 bg-white/[0.02] text-[10px] sm:text-[11px] font-mono font-bold text-slate-400 uppercase tracking-wider">
+                    <th className="py-3 px-3 sm:px-4 w-14 sm:w-16 text-center">Rank</th>
+                    <th className="py-3 px-3 sm:px-4">Student</th>
+                    <th className="py-3 px-3 sm:px-4 hidden sm:table-cell">Real Name</th>
+                    <th className="py-3 px-3 sm:px-4 text-center">Accuracy</th>
+                    <th className="py-3 px-3 sm:px-4 text-center">Experience</th>
+                    <th className="py-3 px-3 sm:px-4 text-right font-black text-[#3ccb57]">Total Rating</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5 text-xs">
@@ -829,7 +829,7 @@ export const LeaderboardModal: React.FC<{
                               : 'hover:bg-white/[0.02]'
                           }`}
                         >
-                          <td className="py-3.5 px-4 text-center font-mono font-black">
+                          <td className="py-3 px-3 sm:px-4 text-center font-mono font-black">
                             {isTop1 ? (
                               <span className="text-xl">🥇</span>
                             ) : isTop2 ? (
@@ -841,9 +841,9 @@ export const LeaderboardModal: React.FC<{
                             )}
                           </td>
 
-                          <td className="py-3.5 px-4">
-                            <div className="flex items-center gap-2">
-                              <span className="font-bold text-white text-sm">{student.nickname}</span>
+                          <td className="py-3 px-3 sm:px-4">
+                            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                              <span className="font-bold text-white text-xs sm:text-sm">{student.nickname}</span>
                               <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-white/5 text-slate-400 uppercase border border-white/10">
                                 {student.studyYear}
                               </span>
@@ -855,19 +855,19 @@ export const LeaderboardModal: React.FC<{
                             </div>
                           </td>
 
-                          <td className="py-3.5 px-4 text-slate-400 font-medium">
+                          <td className="py-3 px-3 sm:px-4 text-slate-400 font-medium hidden sm:table-cell">
                             {student.realName || <span className="text-slate-600">—</span>}
                           </td>
 
-                          <td className="py-3.5 px-4 text-center font-mono font-semibold text-slate-200">
+                          <td className="py-3 px-3 sm:px-4 text-center font-mono font-semibold text-slate-200">
                             {student.monthlyAccuracy}%
                           </td>
 
-                          <td className="py-3.5 px-4 text-center font-mono font-bold text-[#3ccb57]">
-                            {student.isePoints} XP
+                          <td className="py-3 px-3 sm:px-4 text-center font-mono font-bold text-[#3ccb57]">
+                            {student.isePoints} Exp
                           </td>
 
-                          <td className="py-3.5 px-4 text-right font-mono font-black text-sm text-[#3ccb57]">
+                          <td className="py-3 px-3 sm:px-4 text-right font-mono font-black text-xs sm:text-sm text-[#3ccb57]">
                             {student.totalScore.toFixed(1)}
                           </td>
                         </tr>
@@ -891,7 +891,10 @@ export const HistoryModal: React.FC<{
   isOpen: boolean;
   onClose: () => void;
   historyList: TestHistoryItem[];
-}> = ({ isOpen, onClose, historyList }) => {
+  studyMaterials: StudyMaterial[];
+  studyMaterialsError: string | null;
+  onStartWeakQuiz: (topics: Array<{ topic: string; tagName: string }>) => void;
+}> = ({ isOpen, onClose, historyList, studyMaterials, studyMaterialsError, onStartWeakQuiz }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -903,6 +906,8 @@ export const HistoryModal: React.FC<{
     return d.toISOString().split('T')[0];
   });
   const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const localDateKey = (date: Date) =>
+    `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 
   const handlePresetChange = (preset: '7' | '14' | 'custom') => {
     setRangePreset(preset);
@@ -968,22 +973,123 @@ export const HistoryModal: React.FC<{
     );
   }, [historyList, searchQuery]);
 
+  const weakAreas = useMemo(() => {
+    const areas = new Map<string, { topic: string; tagName: string; correct: number; total: number }>();
+    historyList.forEach((item) => {
+      const tagName = item.title.match(/#[\w-]+/)?.[0] || '#General';
+      item.details?.forEach((detail) => {
+        const topic = detail.topic?.trim() || detail.questionText.split(/[?.!]/)[0].trim().slice(0, 64) || 'Untitled topic';
+        const key = `${tagName}:${topic.toLowerCase()}`;
+        const area = areas.get(key) || { topic, tagName, correct: 0, total: 0 };
+        area.total += 1;
+        if (detail.isCorrect) area.correct += 1;
+        areas.set(key, area);
+      });
+    });
+    return Array.from(areas.values())
+      .filter((area) => area.total > area.correct)
+      .map((area) => ({ ...area, mastery: Math.round((area.correct / area.total) * 100) }))
+      .sort((a, b) => a.mastery - b.mastery || b.total - a.total)
+      .slice(0, 5);
+  }, [historyList]);
+
+  const activityByDay = useMemo(() => {
+    const days = new Map<string, { attempts: number; score: number }>();
+    historyList.forEach((item) => {
+      const key = localDateKey(new Date(item.rawDate));
+      const value = days.get(key) || { attempts: 0, score: 0 };
+      value.attempts += 1;
+      value.score += item.maxScore > 0 ? (item.score / item.maxScore) * 100 : 0;
+      days.set(key, value);
+    });
+    return days;
+  }, [historyList]);
+
+  const heatmapDays = useMemo(() => {
+    const days = [];
+    const end = new Date();
+    end.setHours(0, 0, 0, 0);
+    for (let offset = 83; offset >= 0; offset -= 1) {
+      const day = new Date(end);
+      day.setDate(day.getDate() - offset);
+      const key = localDateKey(day);
+      const activity = activityByDay.get(key);
+      const accuracy = activity && activity.attempts > 0 ? activity.score / activity.attempts : 0;
+      const level = !activity ? 0 : accuracy >= 80 ? 4 : accuracy >= 60 ? 3 : accuracy >= 40 ? 2 : 1;
+      days.push({ key, level, attempts: activity?.attempts || 0, accuracy: Math.round(accuracy) });
+    }
+    return days;
+  }, [activityByDay]);
+
+  const streakStats = useMemo(() => {
+    const activeDates = Array.from(activityByDay.keys()).sort((a, b) => b.localeCompare(a));
+    if (activeDates.length === 0) return { days: 0, lastActiveDaysAgo: null as number | null };
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const lastActive = new Date(`${activeDates[0]}T00:00:00`);
+    const lastActiveDaysAgo = Math.floor((today.getTime() - lastActive.getTime()) / 86400000);
+    if (lastActiveDaysAgo > 3) return { days: 0, lastActiveDaysAgo };
+    let days = 1;
+    for (let index = 1; index < activeDates.length; index += 1) {
+      const previous = new Date(`${activeDates[index - 1]}T00:00:00`);
+      const current = new Date(`${activeDates[index]}T00:00:00`);
+      if ((previous.getTime() - current.getTime()) / 86400000 > 3) break;
+      days += 1;
+    }
+    return { days, lastActiveDaysAgo };
+  }, [activityByDay]);
+
+  const mcqResponseTimes = historyList.flatMap((item) =>
+    (item.details || []).flatMap((detail) =>
+      detail.questionType !== 'text' && detail.responseTimeSeconds !== undefined ? [detail.responseTimeSeconds] : []
+    )
+  );
+  const averageMcqSeconds = mcqResponseTimes.length > 0
+    ? Math.round(mcqResponseTimes.reduce((total, seconds) => total + seconds, 0) / mcqResponseTimes.length)
+    : null;
+
+  const materialStats = useMemo(() => {
+    const covered = new Set<string>();
+    const problemSlides = new Map<string, number>();
+    historyList.forEach((item) => item.details?.forEach((detail) => {
+      const title = detail.slideTitle?.toLowerCase();
+      const material = title && studyMaterials.find((entry) =>
+        entry.title.toLowerCase() === title || entry.summary.toLowerCase().includes(title)
+      );
+      if (material && detail.slideTitle) {
+        covered.add(material.title);
+        if (!detail.isCorrect) problemSlides.set(detail.slideTitle, (problemSlides.get(detail.slideTitle) || 0) + 1);
+      }
+    }));
+    return {
+      coveredCount: covered.size,
+      totalCount: studyMaterials.length,
+      problemSlides: Array.from(problemSlides, ([title, errors]) => ({ title, errors }))
+        .sort((a, b) => b.errors - a.errors)
+        .slice(0, 5),
+    };
+  }, [historyList, studyMaterials]);
+
+  const trendDays = chartDays.filter((day) => day.totalTests > 0);
+
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in text-left">
-      <div className="w-full max-w-5xl rounded-2xl border border-white/10 bg-[#060c20] p-7 space-y-6 max-h-[92vh] overflow-y-auto shadow-2xl">
-        <div className="flex justify-between items-center border-b border-white/10 pb-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-fade-in text-left">
+      <div className="w-full max-w-[96vw] 2xl:max-w-[1800px] h-[92vh] rounded-2xl border border-white/10 bg-[#060c20] p-4 sm:p-6 lg:p-7 flex flex-col gap-4 sm:gap-6 overflow-hidden shadow-2xl">
+        <div className="flex justify-between items-center border-b border-white/10 pb-4 shrink-0">
           <div className="flex items-center gap-2.5">
-            <History className="h-5 w-5 text-[#3ccb57]" />
-            <h3 className="text-lg font-bold text-white">Evaluation History & Performance Heatmap</h3>
+            <History className="h-5 w-5 text-[#3ccb57] shrink-0" />
+            <h3 className="text-base sm:text-lg font-bold text-white">History &amp; Statistics</h3>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-white p-1 cursor-pointer"><X className="h-5 w-5" /></button>
         </div>
 
-        <div className="p-6 rounded-2xl bg-[#030714] border border-white/10 space-y-5 relative shadow-inner">
-          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 border-b border-white/10 pb-4">
-            <div className="flex items-center gap-4 text-xs font-mono">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 flex-1 min-h-0 overflow-y-auto lg:overflow-hidden">
+          <div className="min-h-0 lg:overflow-y-auto lg:pr-2 space-y-4 sm:space-y-5">
+        <div className="p-4 sm:p-6 rounded-2xl bg-[#030714] border border-white/10 space-y-4 sm:space-y-5 relative shadow-inner">
+          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3 sm:gap-4 border-b border-white/10 pb-3 sm:pb-4">
+            <div className="flex items-center gap-3 sm:gap-4 text-xs font-mono">
               <span className="flex items-center gap-1.5 text-sky-400"><span className="h-2.5 w-2.5 rounded-sm bg-sky-400 shadow-[0_0_8px_#38bdf8]" /> Quiz</span>
               <span className="flex items-center gap-1.5 text-[#3ccb57]"><span className="h-2.5 w-2.5 rounded-sm bg-[#3ccb57] shadow-[0_0_8px_#3ccb57]" /> Code</span>
               <span className="flex items-center gap-1.5 text-orange-400"><span className="h-2.5 w-2.5 rounded-sm bg-orange-400 shadow-[0_0_8px_#fb923c]" /> Analysis</span>
@@ -1026,47 +1132,54 @@ export const HistoryModal: React.FC<{
             </div>
           </div>
 
-          <div className="relative pt-6 pb-2">
-            <div className="absolute inset-x-0 top-6 bottom-8 flex flex-col justify-between pointer-events-none">
-              {[100, 75, 50, 25, 0].map((val) => (
-                <div key={val} className="w-full flex items-center gap-2">
-                  <span className="text-[10px] font-mono text-slate-500 w-7 text-right">{val}%</span>
-                  <div className="flex-1 border-b border-white/[0.06] border-dashed" />
-                </div>
-              ))}
-            </div>
-
-            <div className="relative z-10 pl-9 pr-2 h-56 flex items-end justify-between gap-1 sm:gap-2">
-              {chartDays.map((day, dIdx) => {
-                const isNearRightEdge = dIdx >= chartDays.length - 4;
-                const tooltipPosClass = isNearRightEdge ? 'right-0 translate-x-0' : 'left-1/2 -translate-x-1/2';
-
-                return (
-                  <div key={day.dateStr} className="group relative flex-1 flex flex-col items-center h-full justify-end">
-                    <div className="w-full flex items-end justify-center gap-0.5 sm:gap-1 h-full pb-2">
-                      <div style={{ height: `${day.quizScore}%` }} className={`w-1.5 sm:w-2 rounded-t-sm transition-all duration-500 ${day.quizScore > 0 ? 'bg-gradient-to-t from-sky-600 to-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.4)]' : 'h-1 bg-white/5'}`} />
-                      <div style={{ height: `${day.codeScore}%` }} className={`w-1.5 sm:w-2 rounded-t-sm transition-all duration-500 ${day.codeScore > 0 ? 'bg-gradient-to-t from-emerald-600 to-[#3ccb57] shadow-[0_0_8px_rgba(60,203,87,0.4)]' : 'h-1 bg-white/5'}`} />
-                      <div style={{ height: `${day.analysisScore}%` }} className={`w-1.5 sm:w-2 rounded-t-sm transition-all duration-500 ${day.analysisScore > 0 ? 'bg-gradient-to-t from-amber-600 to-orange-400 shadow-[0_0_8px_rgba(251,146,60,0.4)]' : 'h-1 bg-white/5'}`} />
-                    </div>
-
-                    <span className="text-[10px] sm:text-[11px] font-mono font-semibold text-slate-400 truncate w-full text-center block pt-1.5">
-                      {day.displayDate}
-                    </span>
-
-                    <div className={`absolute bottom-full mb-3 hidden group-hover:block z-50 w-56 p-3 rounded-xl border border-white/15 bg-[#060c20]/98 backdrop-blur-2xl shadow-2xl text-[11px] pointer-events-none animate-fade-in ${tooltipPosClass}`}>
-                      <div className="font-bold text-white border-b border-white/10 pb-1.5 mb-2 flex justify-between">
-                        <span>{day.displayDate}</span>
-                        <span className="text-[#3ccb57] font-mono">{day.totalTests} tests</span>
-                      </div>
-                      <div className="space-y-1.5 font-mono">
-                        <div className="flex justify-between text-sky-400"><span>Quiz:</span><strong>{day.quizScore > 0 ? `${day.quizScore}%` : '—'}</strong></div>
-                        <div className="flex justify-between text-[#3ccb57]"><span>Code:</span><strong>{day.codeScore > 0 ? `${day.codeScore}%` : '—'}</strong></div>
-                        <div className="flex justify-between text-orange-400"><span>Analysis:</span><strong>{day.analysisScore > 0 ? `${day.analysisScore}%` : '—'}</strong></div>
-                      </div>
-                    </div>
+          <div className="relative pt-6 pb-2 overflow-x-auto scrollbar-thin">
+            <div className="min-w-[340px] sm:min-w-0 relative">
+              <div className="absolute inset-x-0 top-0 bottom-8 flex flex-col justify-between pointer-events-none">
+                {[100, 75, 50, 25, 0].map((val) => (
+                  <div key={val} className="w-full flex items-center gap-2">
+                    <span className="text-[10px] font-mono text-slate-500 w-7 text-right">{val}%</span>
+                    <div className="flex-1 border-b border-white/[0.06] border-dashed" />
                   </div>
-                );
-              })}
+                ))}
+              </div>
+
+              <div className="relative z-10 pl-9 pr-2 h-52 sm:h-56 flex items-end justify-between gap-1 sm:gap-2">
+                {chartDays.map((day, dIdx) => {
+                  const isNearLeftEdge = dIdx <= 2;
+                  const isNearRightEdge = dIdx >= chartDays.length - 3;
+                  const tooltipPosClass = isNearLeftEdge
+                    ? 'left-0 translate-x-0'
+                    : isNearRightEdge
+                    ? 'right-0 translate-x-0'
+                    : 'left-1/2 -translate-x-1/2';
+
+                  return (
+                    <div key={day.dateStr} className="group relative flex-1 flex flex-col items-center h-full justify-end hover:bg-white/[0.04] rounded-lg transition-colors cursor-pointer">
+                      <div className="w-full flex items-end justify-center gap-0.5 sm:gap-1 h-full pb-2">
+                        <div style={{ height: `${day.quizScore}%` }} className={`w-1.5 sm:w-2 rounded-t-sm transition-all duration-500 ${day.quizScore > 0 ? 'bg-gradient-to-t from-sky-600 to-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.4)]' : 'h-1 bg-white/5'}`} />
+                        <div style={{ height: `${day.codeScore}%` }} className={`w-1.5 sm:w-2 rounded-t-sm transition-all duration-500 ${day.codeScore > 0 ? 'bg-gradient-to-t from-emerald-600 to-[#3ccb57] shadow-[0_0_8px_rgba(60,203,87,0.4)]' : 'h-1 bg-white/5'}`} />
+                        <div style={{ height: `${day.analysisScore}%` }} className={`w-1.5 sm:w-2 rounded-t-sm transition-all duration-500 ${day.analysisScore > 0 ? 'bg-gradient-to-t from-amber-600 to-orange-400 shadow-[0_0_8px_rgba(251,146,60,0.4)]' : 'h-1 bg-white/5'}`} />
+                      </div>
+
+                      <span className="text-[10px] sm:text-[11px] font-mono font-semibold text-slate-400 truncate w-full text-center block pt-1.5">
+                        {day.displayDate}
+                      </span>
+
+                      <div className={`absolute top-2 hidden group-hover:block z-50 w-52 sm:w-56 p-3 rounded-xl border border-white/15 bg-[#060c20]/98 backdrop-blur-2xl shadow-[0_4px_25px_rgba(0,0,0,0.8)] text-[11px] pointer-events-none animate-fade-in ${tooltipPosClass}`}>
+                        <div className="font-bold text-white border-b border-white/10 pb-1.5 mb-2 flex justify-between">
+                          <span>{day.displayDate}</span>
+                          <span className="text-[#3ccb57] font-mono">{day.totalTests} tests</span>
+                        </div>
+                        <div className="space-y-1.5 font-mono">
+                          <div className="flex justify-between text-sky-400"><span>Quiz:</span><strong>{day.quizScore > 0 ? `${day.quizScore}%` : '—'}</strong></div>
+                          <div className="flex justify-between text-[#3ccb57]"><span>Code:</span><strong>{day.codeScore > 0 ? `${day.codeScore}%` : '—'}</strong></div>
+                          <div className="flex justify-between text-orange-400"><span>Analysis:</span><strong>{day.analysisScore > 0 ? `${day.analysisScore}%` : '—'}</strong></div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
         </div>
@@ -1091,20 +1204,28 @@ export const HistoryModal: React.FC<{
           ) : (
             filteredHistory.map((h) => {
               const isExpanded = expandedId === h.id;
+              const isQuiz = h.type === 'Quiz';
+              const isCode = h.type === 'Code Challenge';
+              // Quiz → sky blue, Code Challenge → neon green, Analysis/Tracing → orange
+              const typeColor = isQuiz
+                ? { text: 'text-sky-400', bg: 'bg-sky-400/10', border: 'border-sky-400/30' }
+                : isCode
+                ? { text: 'text-[#3ccb57]', bg: 'bg-[#3ccb57]/10', border: 'border-[#3ccb57]/20' }
+                : { text: 'text-orange-400', bg: 'bg-orange-400/10', border: 'border-orange-400/30' };
               return (
-                <div key={h.id} className="p-4 rounded-xl border border-white/10 bg-black/40 space-y-3 transition-all">
+                <div key={h.id} className={`p-4 rounded-xl border bg-black/40 space-y-3 transition-all ${isQuiz ? 'border-sky-400/20' : isCode ? 'border-white/10' : 'border-orange-400/20'}`}>
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-mono font-bold text-[#3ccb57] bg-[#3ccb57]/10 px-2 py-0.5 rounded border border-[#3ccb57]/20">
+                      <span className={`text-xs font-mono font-bold px-2 py-0.5 rounded border ${typeColor.text} ${typeColor.bg} ${typeColor.border}`}>
                         {h.type}
                       </span>
                       <span className="text-sm font-bold text-white">{h.title}</span>
                     </div>
 
                     <div className="flex items-center gap-3">
-                      <span className="text-xs font-mono font-bold text-[#3ccb57]">+{h.pointsEarned || 0} XP</span>
+                      <span className={`text-xs font-mono font-bold ${typeColor.text}`}>+{h.pointsEarned || 0} Exp</span>
                       <span className="text-xs text-slate-400">{h.timeSpent} · {h.date}</span>
-                      <span className="text-base font-black font-mono text-[#3ccb57]">{h.score}/{h.maxScore}</span>
+                      <span className={`text-base font-black font-mono ${typeColor.text}`}>{h.score}/{h.maxScore}</span>
                       <button
                         type="button"
                         onClick={() => setExpandedId(isExpanded ? null : h.id)}
@@ -1151,6 +1272,8 @@ export const HistoryModal: React.FC<{
                                 <div className="text-slate-400">Your answer: <span className="text-white">{q.userAnswer.join(', ') || 'No answer'}</span></div>
                                 <div className="text-[#3ccb57]">Correct: {q.correctAnswers.join(', ')}</div>
                               </div>
+                              {q.topic && <div className="text-[11px] text-slate-400">Topic: <span className="text-slate-200">{q.topic}</span></div>}
+                              {q.slideTitle && <div className="text-[11px] text-slate-400">Study material: <span className="text-sky-300">{q.slideTitle}</span></div>}
                               <div className="p-2 rounded bg-black/40 text-[11px] text-slate-400">{q.explanation}</div>
                             </div>
                           ))}
@@ -1162,6 +1285,127 @@ export const HistoryModal: React.FC<{
               );
             })
           )}
+        </div>
+          </div>
+
+          <div className="min-h-0 lg:overflow-y-auto lg:pl-1 space-y-4 sm:space-y-5">
+            <section className="p-4 sm:p-5 rounded-2xl bg-[#030714] border border-white/10 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                <div>
+                  <h4 className="text-sm font-bold text-white flex items-center gap-2"><Brain className="h-4 w-4 text-[#3ccb57]" /> Knowledge Mastery</h4>
+                  <p className="text-[11px] text-slate-400 mt-1">Recent practice accuracy by day · last 12 weeks</p>
+                </div>
+                <button
+                  type="button"
+                  disabled={weakAreas.length === 0}
+                  onClick={() => onStartWeakQuiz(weakAreas)}
+                  className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-bold bg-[#3ccb57] text-black hover:bg-[#4ade67] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shrink-0"
+                >
+                  <Sparkles className="h-3.5 w-3.5" /> Quiz weak topics
+                </button>
+              </div>
+
+              <div className="overflow-x-auto pb-1">
+                <div className="grid grid-rows-7 grid-flow-col auto-cols-max gap-1 min-w-max" aria-label="12-week learning accuracy heatmap">
+                  {heatmapDays.map((day) => (
+                    <span
+                      key={day.key}
+                      title={`${day.key}: ${day.attempts ? `${day.attempts} tests · ${day.accuracy}% average` : 'No tests'}`}
+                      className={`h-3 w-3 rounded-[3px] ${day.level === 0 ? 'bg-white/[0.07]' : day.level === 1 ? 'bg-red-500/60' : day.level === 2 ? 'bg-amber-500/70' : day.level === 3 ? 'bg-lime-500/80' : 'bg-[#3ccb57]'}`}
+                    />
+                  ))}
+                </div>
+              </div>
+              <div className="flex justify-end items-center gap-1.5 text-[10px] text-slate-500">
+                Less <span className="h-2.5 w-2.5 rounded-sm bg-white/[0.07]" /><span className="h-2.5 w-2.5 rounded-sm bg-red-500/60" /><span className="h-2.5 w-2.5 rounded-sm bg-amber-500/70" /><span className="h-2.5 w-2.5 rounded-sm bg-lime-500/80" /><span className="h-2.5 w-2.5 rounded-sm bg-[#3ccb57]" /> More
+              </div>
+
+              <div className="border-t border-white/10 pt-3">
+                <h5 className="text-xs font-bold text-slate-200 mb-2">Top Areas to Improve</h5>
+                {weakAreas.length === 0 ? (
+                  <p className="text-[11px] text-slate-500">Complete quizzes with question breakdowns to discover topics to revisit.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {weakAreas.map((area) => (
+                      <div key={`${area.tagName}:${area.topic}`} className="flex items-center gap-3 text-xs">
+                        <span className="min-w-0 flex-1 truncate text-slate-200" title={`${area.tagName} · ${area.topic}`}>{area.topic}</span>
+                        <span className="text-[10px] text-slate-500">{area.tagName}</span>
+                        <span className="font-mono text-amber-300">{area.mastery}%</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </section>
+
+            <section className="p-4 sm:p-5 rounded-2xl bg-[#030714] border border-white/10 space-y-3">
+              <h4 className="text-sm font-bold text-white flex items-center gap-2"><BarChart3 className="h-4 w-4 text-sky-400" /> Performance trend</h4>
+              <p className="text-[11px] text-slate-400">Average score on practice days in the selected date range</p>
+              {trendDays.length === 0 ? (
+                <p className="text-xs text-slate-500 py-3">No completed activities in this date range.</p>
+              ) : (
+                <div className="flex items-end gap-1 h-24 border-b border-white/10">
+                  {trendDays.map((day) => {
+                    const average = Math.round(
+                      day.items.reduce((total, item) => total + (item.maxScore > 0 ? (item.score / item.maxScore) * 100 : 0), 0) / day.totalTests
+                    );
+                    return (
+                      <div key={day.dateStr} className="group relative flex-1 h-full flex items-end">
+                        <div title={`${day.displayDate}: ${average}%`} style={{ height: `${Math.max(average, 4)}%` }} className="w-full rounded-t-sm bg-gradient-to-t from-sky-700 to-sky-400 group-hover:from-[#3ccb57] group-hover:to-lime-300 transition-colors" />
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {trendDays.length > 0 && <div className="flex justify-between text-[10px] text-slate-500"><span>{trendDays[0].displayDate}</span><span>{trendDays[trendDays.length - 1].displayDate}</span></div>}
+            </section>
+
+            <section className="p-4 sm:p-5 rounded-2xl bg-[#030714] border border-white/10 space-y-3">
+              <h4 className="text-sm font-bold text-white">Slide Analytics</h4>
+              {studyMaterialsError ? (
+                <p className="text-xs text-red-300">Could not load approved study materials: {studyMaterialsError}</p>
+              ) : (
+                <>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-slate-300">Material coverage</span>
+                    <strong className="text-[#3ccb57]">{materialStats.totalCount ? `${Math.round((materialStats.coveredCount / materialStats.totalCount) * 100)}%` : '—'}</strong>
+                  </div>
+                  <div className="h-2 rounded-full bg-white/10 overflow-hidden">
+                    <div style={{ width: `${materialStats.totalCount ? (materialStats.coveredCount / materialStats.totalCount) * 100 : 0}%` }} className="h-full bg-[#3ccb57] rounded-full" />
+                  </div>
+                  <p className="text-[10px] text-slate-500">{materialStats.coveredCount} of {materialStats.totalCount} approved materials linked to answered questions.</p>
+                  <div className="border-t border-white/10 pt-3">
+                    <h5 className="text-xs font-bold text-slate-200 mb-2">Problem slides</h5>
+                    {materialStats.problemSlides.length === 0 ? (
+                      <p className="text-[11px] text-slate-500">{studyMaterials.length ? 'No incorrect answers are linked to these materials yet.' : 'No approved slide summaries found in Supabase yet.'}</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {materialStats.problemSlides.map((slide) => (
+                          <div key={slide.title} className="flex justify-between gap-3 text-xs">
+                            <span className="truncate text-slate-300" title={slide.title}>{slide.title}</span>
+                            <span className="shrink-0 text-red-300">{slide.errors} incorrect</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </section>
+
+            <section className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="p-4 rounded-2xl bg-[#030714] border border-white/10">
+                <p className="text-[11px] text-slate-400">Learning streak</p>
+                <strong className="block text-2xl font-black text-[#3ccb57] mt-1">{streakStats.days} <span className="text-xs font-semibold text-slate-300">active days</span></strong>
+                <p className="text-[10px] text-slate-500 mt-1">Resets after 3 consecutive days without a quiz or assignment.</p>
+              </div>
+              <div className="p-4 rounded-2xl bg-[#030714] border border-white/10">
+                <p className="text-[11px] text-slate-400">Average MCQ response</p>
+                <strong className="block text-2xl font-black text-sky-300 mt-1">{averageMcqSeconds === null ? '—' : `${averageMcqSeconds}s`}</strong>
+                <p className="text-[10px] text-slate-500 mt-1">{mcqResponseTimes.length ? `From ${mcqResponseTimes.length} timed answers` : 'Tracked on new multiple/single choice quizzes'}</p>
+              </div>
+            </section>
+          </div>
         </div>
       </div>
     </div>
@@ -1277,8 +1521,8 @@ export const SettingsModal: React.FC<{
 
   return (
     <>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in text-left">
-        <div className="w-full max-w-5xl rounded-2xl border border-white/10 bg-[#060c20] p-7 space-y-6 max-h-[92vh] overflow-y-auto shadow-2xl">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-fade-in text-left">
+        <div className="w-full max-w-5xl rounded-2xl border border-white/10 bg-[#060c20] p-4 sm:p-6 lg:p-7 space-y-4 sm:space-y-6 max-h-[92vh] overflow-y-auto shadow-2xl">
           <div className="flex justify-between items-center border-b border-white/10 pb-4">
             <h3 className="text-lg font-bold text-white flex items-center gap-2">
               <Settings className="h-5 w-5 text-[#3ccb57]" /> User Settings & Account Controls
@@ -1287,7 +1531,7 @@ export const SettingsModal: React.FC<{
           </div>
 
           {/* 1. Profile: Nickname, Real Name & Leaderboard Toggle */}
-          <div className="p-5 rounded-xl bg-white/[0.02] border border-white/10 space-y-4">
+          <div className="p-4 sm:p-5 rounded-xl bg-white/[0.02] border border-white/10 space-y-4">
             <label className="block text-xs font-semibold text-slate-300 flex items-center gap-1.5">
               <User className="h-4 w-4 text-[#3ccb57]" /> Public Identity & Leaderboard Privacy
             </label>
@@ -1351,7 +1595,7 @@ export const SettingsModal: React.FC<{
           </div>
 
           {/* 2. Change Password */}
-          <div className="p-5 rounded-xl bg-white/[0.02] border border-white/10 space-y-3">
+          <div className="p-4 sm:p-5 rounded-xl bg-white/[0.02] border border-white/10 space-y-3">
             <label className="block text-xs font-semibold text-slate-300 flex items-center gap-1.5">
               <Key className="h-4 w-4 text-[#3ccb57]" /> Change Password (No verification required)
             </label>
@@ -1417,7 +1661,7 @@ export const SettingsModal: React.FC<{
               <span>Google AI Studio API Key (Local Device Storage)</span>
               <ApiKeyTooltip />
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-col sm:flex-row gap-2">
               <input
                 type="password"
                 autoComplete="new-password"
@@ -1426,7 +1670,7 @@ export const SettingsModal: React.FC<{
                 placeholder="AIzaSy..."
                 className="flex-1 p-2.5 rounded-xl bg-black/60 border border-white/10 text-xs text-white font-mono"
               />
-              <button onClick={onSaveKey} className="px-5 py-2.5 rounded-xl font-bold text-xs bg-[#3ccb57] text-black cursor-pointer">
+              <button onClick={onSaveKey} className="px-5 py-2.5 rounded-xl font-bold text-xs bg-[#3ccb57] text-black cursor-pointer w-full sm:w-auto">
                 Save
               </button>
             </div>
@@ -1435,7 +1679,7 @@ export const SettingsModal: React.FC<{
 
           {/* 5. DANGER ZONE */}
           <div className="pt-4 border-t border-red-500/20">
-            <div className="p-5 rounded-xl bg-red-950/20 border border-red-500/30 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div className="p-4 sm:p-5 rounded-xl bg-red-950/20 border border-red-500/30 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
               <div>
                 <h4 className="text-xs font-bold text-red-300 flex items-center gap-1.5 uppercase tracking-wider">
                   <Trash2 className="h-4 w-4 text-red-400" /> Danger Zone: Delete Account
@@ -1450,7 +1694,7 @@ export const SettingsModal: React.FC<{
                   setDeleteConfirmText('');
                   setShowDeleteModal(true);
                 }}
-                className="px-5 py-2.5 rounded-xl text-xs font-bold bg-red-600/30 hover:bg-red-600/50 text-red-200 border border-red-500/40 transition-colors cursor-pointer shrink-0"
+                className="px-5 py-2.5 rounded-xl text-xs font-bold bg-red-600/30 hover:bg-red-600/50 text-red-200 border border-red-500/40 transition-colors cursor-pointer shrink-0 w-full sm:w-auto"
               >
                 Delete Account
               </button>
@@ -1464,8 +1708,8 @@ export const SettingsModal: React.FC<{
       </div>
 
       {showDeleteModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in text-left">
-          <div className="w-full max-w-md rounded-2xl border border-red-500/40 bg-[#060c20] p-6 space-y-4 shadow-2xl">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-fade-in text-left">
+          <div className="w-full max-w-md rounded-2xl border border-red-500/40 bg-[#060c20] p-4 sm:p-6 space-y-4 shadow-2xl">
             <div className="flex items-center gap-2.5 text-red-400 border-b border-red-500/20 pb-3">
               <AlertTriangle className="h-5 w-5 shrink-0" />
               <h4 className="text-sm font-bold text-white uppercase tracking-wider">
@@ -1556,8 +1800,8 @@ export const AdminModal: React.FC<{
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in text-left">
-      <div className="w-full max-w-5xl rounded-2xl border border-amber-500/30 bg-[#060c20] p-7 space-y-5 max-h-[92vh] overflow-y-auto shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-fade-in text-left">
+      <div className="w-full max-w-5xl rounded-2xl border border-amber-500/30 bg-[#060c20] p-4 sm:p-6 lg:p-7 space-y-4 sm:space-y-5 max-h-[92vh] overflow-y-auto shadow-2xl">
         <div className="flex justify-between items-center border-b border-white/10 pb-4">
           <div className="flex items-center gap-2.5">
             <Shield className="h-5 w-5 text-amber-400" />

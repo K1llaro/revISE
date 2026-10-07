@@ -10,47 +10,49 @@ export const ActiveQuizView: React.FC<{
   quizTimeLeft: number;
   userAnswers: Record<number, string[]>;
   setUserAnswers: React.Dispatch<React.SetStateAction<Record<number, string[]>>>;
+  onAnswerStarted: (questionId: number) => void;
   selectedTag: string;
   quizScoringMode: 'partial' | 'strict';
   onAbandon: () => void;
   onSubmit: () => void;
-}> = ({ activeQuiz, quizTimeLeft, userAnswers, setUserAnswers, selectedTag, quizScoringMode, onAbandon, onSubmit }) => {
+}> = ({ activeQuiz, quizTimeLeft, userAnswers, setUserAnswers, onAnswerStarted, selectedTag, quizScoringMode, onAbandon, onSubmit }) => {
   const minutesLeft = Math.floor(quizTimeLeft / 60);
   const secondsLeft = quizTimeLeft % 60;
 
   return (
-    <div className="w-full max-w-4xl mx-auto h-[82vh] flex flex-col justify-between space-y-3 text-left animate-fade-in overflow-hidden">
-      <div className="flex items-center justify-between p-4 rounded-2xl bg-[#060c20]/95 border border-white/10 shrink-0 backdrop-blur-xl shadow-lg">
-        <div>
-          <span className="text-[10px] font-mono text-[#3ccb57] font-bold uppercase">{selectedTag || '#General'} · {quizScoringMode.toUpperCase()}</span>
-          <h2 className="text-lg font-bold text-white tracking-tight">{activeQuiz.title}</h2>
+    <div className="w-full max-w-4xl mx-auto h-[calc(100dvh-7.5rem)] sm:h-[82vh] flex flex-col justify-between space-y-3 text-left animate-fade-in overflow-hidden">
+      <div className="flex items-center justify-between p-3.5 sm:p-4 rounded-xl sm:rounded-2xl bg-[#060c20]/95 border border-white/10 shrink-0 backdrop-blur-xl shadow-lg">
+        <div className="min-w-0 pr-2">
+          <span className="text-[10px] font-mono text-[#3ccb57] font-bold uppercase truncate block">{selectedTag || '#General'} · {quizScoringMode.toUpperCase()}</span>
+          <h2 className="text-base sm:text-lg font-bold text-white tracking-tight truncate">{activeQuiz.title}</h2>
         </div>
-        <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-black border border-white/10 font-mono text-sm text-[#3ccb57] shrink-0">
-          <Clock className="h-4 w-4" />
+        <div className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3.5 py-1.5 rounded-xl bg-black border border-white/10 font-mono text-xs sm:text-sm text-[#3ccb57] shrink-0">
+          <Clock className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
           <span>{minutesLeft}:{secondsLeft < 10 ? '0' : ''}{secondsLeft}</span>
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto space-y-4 pr-2">
+      <div className="flex-1 min-h-0 overflow-y-auto space-y-3 sm:space-y-4 pr-1 sm:pr-2">
         {activeQuiz.questions.map((q, idx) => {
           const selected = userAnswers[q.id] || [];
           return (
-            <div key={q.id} className="p-6 rounded-2xl border border-white/10 bg-[#060c20]/90 space-y-3 shadow-md">
+            <div key={q.id} className="p-4 sm:p-6 rounded-xl sm:rounded-2xl border border-white/10 bg-[#060c20]/90 space-y-3 shadow-md">
               <div className="flex justify-between text-xs font-mono text-slate-400">
                 <span>Question {idx + 1} of {activeQuiz.questions.length}</span>
                 <span className="text-[#3ccb57] font-semibold">{q.type === 'multiple' ? 'Multiple Choice' : q.type === 'single' ? 'Single Choice' : 'Text Input'}</span>
               </div>
               <h3 className="text-sm sm:text-base font-semibold text-white leading-relaxed">{q.question}</h3>
-              {q.codeSnippet && <pre className="p-3.5 rounded-xl bg-black/70 border border-white/10 font-mono text-xs text-[#3ccb57] overflow-x-auto">{q.codeSnippet}</pre>}
+              {q.codeSnippet && <pre className="p-3 sm:p-3.5 rounded-xl bg-black/70 border border-white/10 font-mono text-[11px] sm:text-xs text-[#3ccb57] overflow-x-auto">{q.codeSnippet}</pre>}
 
               {q.options && q.options.length > 0 && (
-                <div className="space-y-2 pt-2">
+                <div className="space-y-2 pt-1 sm:pt-2">
                   {q.options.map((opt, oIdx) => {
                     const isChecked = selected.includes(opt);
                     return (
                       <div
                         key={oIdx}
                         onClick={() => {
+                          onAnswerStarted(q.id);
                           const isMulti = q.type === 'multiple';
                           setUserAnswers((prev) => {
                             const cur = prev[q.id] || [];
@@ -58,12 +60,12 @@ export const ActiveQuizView: React.FC<{
                             return { ...prev, [q.id]: upd };
                           });
                         }}
-                        className={`p-3.5 rounded-xl border flex items-center justify-between text-xs sm:text-sm cursor-pointer transition-all ${
+                        className={`p-3 sm:p-3.5 rounded-xl border flex items-center justify-between text-xs sm:text-sm cursor-pointer transition-all ${
                           isChecked ? 'border-[#3ccb57] bg-[#3ccb57]/15 text-white shadow-[0_0_12px_rgba(60,203,87,0.15)]' : 'border-white/10 bg-black/30 text-slate-300 hover:bg-white/5'
                         }`}
                       >
-                        <div className="flex items-center gap-3">
-                          <span className={`h-4 w-4 rounded-${q.type === 'multiple' ? 'sm' : 'full'} border flex items-center justify-center text-[10px] ${isChecked ? 'bg-[#3ccb57] text-black font-bold' : 'border-white/20'}`}>✓</span>
+                        <div className="flex items-center gap-2.5 sm:gap-3">
+                          <span className={`h-4 w-4 shrink-0 rounded-${q.type === 'multiple' ? 'sm' : 'full'} border flex items-center justify-center text-[10px] ${isChecked ? 'bg-[#3ccb57] text-black font-bold' : 'border-white/20'}`}>✓</span>
                           <span>{opt}</span>
                         </div>
                       </div>
@@ -77,9 +79,12 @@ export const ActiveQuizView: React.FC<{
                   <input
                     type="text"
                     value={selected[0] || ''}
-                    onChange={(e) => setUserAnswers((prev) => ({ ...prev, [q.id]: [e.target.value] }))}
+                    onChange={(e) => {
+                      onAnswerStarted(q.id);
+                      setUserAnswers((prev) => ({ ...prev, [q.id]: [e.target.value] }));
+                    }}
                     placeholder="Type your answer here..."
-                    className="w-full p-3.5 rounded-xl bg-black/50 border border-white/10 text-xs text-white focus:outline-none focus:border-[#3ccb57]"
+                    className="w-full p-3 sm:p-3.5 rounded-xl bg-black/50 border border-white/10 text-xs text-white focus:outline-none focus:border-[#3ccb57]"
                   />
                 </div>
               )}
@@ -88,9 +93,9 @@ export const ActiveQuizView: React.FC<{
         })}
       </div>
 
-      <div className="flex justify-between items-center p-3.5 rounded-2xl bg-[#060c20]/95 border border-white/10 shrink-0 shadow-lg">
+      <div className="flex justify-between items-center p-3 sm:p-3.5 rounded-xl sm:rounded-2xl bg-[#060c20]/95 border border-white/10 shrink-0 shadow-lg">
         <button onClick={onAbandon} className="text-xs text-red-400 hover:text-red-300 px-2 cursor-pointer font-semibold">Abandon Quiz</button>
-        <button onClick={onSubmit} className="px-7 py-2.5 rounded-xl font-bold text-xs bg-[#3ccb57] text-black hover:bg-[#4ade67] transition-all cursor-pointer shadow-[0_0_15px_rgba(60,203,87,0.3)]">Submit Quiz</button>
+        <button onClick={onSubmit} className="px-5 sm:px-7 py-2 sm:py-2.5 rounded-xl font-bold text-xs bg-[#3ccb57] text-black hover:bg-[#4ade67] transition-all cursor-pointer shadow-[0_0_15px_rgba(60,203,87,0.3)]">Submit Quiz</button>
       </div>
     </div>
   );
@@ -104,25 +109,25 @@ export const QuizResultsView: React.FC<{
   quizResults: { score: number; details: QuestionReviewDetail[] };
   onBack: () => void;
 }> = ({ activeQuiz, quizResults, onBack }) => (
-  <div className="w-full max-w-5xl mx-auto h-[82vh] overflow-y-auto pr-2 space-y-5 text-left animate-fade-in pb-4">
-    <div className="p-7 rounded-2xl border border-white/10 bg-[#060c20]/90 flex justify-between items-center shadow-lg">
+  <div className="w-full max-w-5xl mx-auto max-h-full sm:h-[82vh] overflow-y-auto pr-1 sm:pr-2 space-y-4 sm:space-y-5 text-left animate-fade-in pb-4">
+    <div className="p-4 sm:p-7 rounded-xl sm:rounded-2xl border border-white/10 bg-[#060c20]/90 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 shadow-lg">
       <div>
-        <span className="text-xs font-mono text-[#3ccb57] uppercase font-bold block mb-1">
+        <span className="text-[10px] sm:text-xs font-mono text-[#3ccb57] uppercase font-bold block mb-1">
           Quiz Finalized · Recorded to Supabase
         </span>
-        <h2 className="text-2xl font-black text-white">{activeQuiz?.title || 'Examination Results'}</h2>
+        <h2 className="text-xl sm:text-2xl font-black text-white">{activeQuiz?.title || 'Examination Results'}</h2>
       </div>
-      <div className="text-right">
-        <span className="text-4xl font-black text-[#3ccb57] font-mono">{quizResults.score}%</span>
+      <div className="sm:text-right">
+        <span className="text-3xl sm:text-4xl font-black text-[#3ccb57] font-mono">{quizResults.score}%</span>
         <span className="block text-[10px] text-slate-400 uppercase mt-0.5">Final Grade</span>
       </div>
     </div>
 
-    <div className="space-y-4">
+    <div className="space-y-3 sm:space-y-4">
       {quizResults.details?.map((item, idx) => (
         <div
           key={idx}
-          className={`p-5 rounded-2xl border ${
+          className={`p-4 sm:p-5 rounded-xl sm:rounded-2xl border ${
             item.isCorrect
               ? 'border-[#3ccb57]/40 bg-[#3ccb57]/5'
               : item.points > 0
@@ -144,10 +149,10 @@ export const QuizResultsView: React.FC<{
             </span>
           </div>
 
-          <p className="text-sm font-medium text-slate-200 leading-relaxed">{item.questionText}</p>
+          <p className="text-xs sm:text-sm font-medium text-slate-200 leading-relaxed">{item.questionText}</p>
 
           {item.codeSnippet && (
-            <pre className="p-3 rounded-xl bg-black/70 border border-white/10 font-mono text-xs text-[#3ccb57] overflow-x-auto">
+            <pre className="p-3 rounded-xl bg-black/70 border border-white/10 font-mono text-[11px] sm:text-xs text-[#3ccb57] overflow-x-auto">
               <code>{item.codeSnippet}</code>
             </pre>
           )}
@@ -175,7 +180,7 @@ export const QuizResultsView: React.FC<{
     <div className="text-center pt-2">
       <button
         onClick={onBack}
-        className="px-8 py-3 rounded-xl font-bold text-xs bg-[#3ccb57] text-black hover:bg-[#4ade67] transition-all shadow-[0_0_20px_rgba(60,203,87,0.3)] cursor-pointer"
+        className="w-full sm:w-auto px-8 py-3 rounded-xl font-bold text-xs bg-[#3ccb57] text-black hover:bg-[#4ade67] transition-all shadow-[0_0_20px_rgba(60,203,87,0.3)] cursor-pointer"
       >
         Return to Learning Station
       </button>
@@ -195,27 +200,27 @@ export const ActiveProgView: React.FC<{
   onExit: () => void;
   onSubmit: () => void;
 }> = ({ activeProg, progDifficulty, studentCodeInput, setStudentCodeInput, isGenerating, onExit, onSubmit }) => (
-  <div className="w-full max-w-6xl mx-auto h-[82vh] overflow-y-auto pr-2 space-y-5 text-left animate-fade-in pb-4">
-    <div className="flex justify-between items-center p-4 rounded-2xl bg-[#060c20]/90 border border-white/10">
+  <div className="w-full max-w-6xl mx-auto max-h-full sm:h-[82vh] overflow-y-auto pr-1 sm:pr-2 space-y-4 sm:space-y-5 text-left animate-fade-in pb-4">
+    <div className="flex justify-between items-center p-3.5 sm:p-4 rounded-xl sm:rounded-2xl bg-[#060c20]/90 border border-white/10">
       <div>
         <span className="text-[10px] font-mono text-[#3ccb57] font-bold uppercase">{activeProg.language} · {progDifficulty}</span>
-        <h2 className="text-xl font-bold text-white">{activeProg.title}</h2>
+        <h2 className="text-lg sm:text-xl font-bold text-white">{activeProg.title}</h2>
       </div>
       <button onClick={onExit} className="text-xs text-red-400 hover:underline cursor-pointer font-semibold">Exit Challenge</button>
     </div>
 
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-      <div className="lg:col-span-6 p-6 rounded-2xl bg-[#060c20]/90 border border-white/10 space-y-4 max-h-[70vh] overflow-y-auto">
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6">
+      <div className="lg:col-span-6 p-4 sm:p-6 rounded-xl sm:rounded-2xl bg-[#060c20]/90 border border-white/10 space-y-4 lg:max-h-[70vh] lg:overflow-y-auto">
         <div>
-          <h3 className="text-sm font-bold text-[#3ccb57] uppercase tracking-wider mb-1">Objective</h3>
+          <h3 className="text-xs sm:text-sm font-bold text-[#3ccb57] uppercase tracking-wider mb-1">Objective</h3>
           <p className="text-xs text-slate-300 leading-relaxed">{activeProg.objective}</p>
         </div>
 
         <div>
-          <h3 className="text-sm font-bold text-white uppercase tracking-wider mb-2">Key Requirements</h3>
+          <h3 className="text-xs sm:text-sm font-bold text-white uppercase tracking-wider mb-2">Key Requirements</h3>
           <div className="space-y-2 text-xs text-slate-300">
             {activeProg.requirements?.map((req, i) => (
-              <div key={i} className="p-2.5 rounded-xl bg-white/[0.02] border border-white/5 leading-relaxed">
+              <div key={i} className="p-2 sm:p-2.5 rounded-xl bg-white/[0.02] border border-white/5 leading-relaxed">
                 {req}
               </div>
             ))}
@@ -235,23 +240,23 @@ export const ActiveProgView: React.FC<{
 
         <div className="pt-2">
           <h3 className="text-xs font-bold text-slate-400 uppercase mb-1.5">Example Output</h3>
-          <pre className="p-3.5 rounded-xl bg-black/80 border border-white/10 font-mono text-xs text-[#3ccb57] overflow-x-auto leading-relaxed">
+          <pre className="p-3 sm:p-3.5 rounded-xl bg-black/80 border border-white/10 font-mono text-xs text-[#3ccb57] overflow-x-auto leading-relaxed">
             {activeProg.exampleOutput}
           </pre>
         </div>
       </div>
 
-      <div className="lg:col-span-6 p-6 rounded-2xl bg-[#060c20]/90 border border-white/10 flex flex-col justify-between space-y-4">
+      <div className="lg:col-span-6 p-4 sm:p-6 rounded-xl sm:rounded-2xl bg-[#060c20]/90 border border-white/10 flex flex-col justify-between space-y-4">
         <div>
           <div className="flex justify-between items-center mb-2">
             <span className="text-xs font-bold text-slate-300 uppercase">Write Your Java Solution</span>
             <span className="text-xs text-slate-500 font-mono">{activeProg.language}</span>
           </div>
           <textarea
-            rows={18}
+            rows={12}
             value={studentCodeInput}
             onChange={(e) => setStudentCodeInput(e.target.value)}
-            className="w-full p-4 rounded-xl bg-black/80 border border-white/15 font-mono text-xs text-white focus:outline-none focus:border-[#3ccb57] leading-relaxed shadow-inner"
+            className="w-full p-3 sm:p-4 rounded-xl bg-black/80 border border-white/15 font-mono text-xs text-white focus:outline-none focus:border-[#3ccb57] leading-relaxed shadow-inner"
           />
         </div>
 
@@ -260,7 +265,7 @@ export const ActiveProgView: React.FC<{
             type="button"
             onClick={onSubmit}
             disabled={isGenerating}
-            className="px-6 py-2.5 rounded-xl font-bold text-xs bg-[#3ccb57] text-black hover:bg-[#4ade67] transition-all flex items-center gap-2 cursor-pointer shadow-[0_0_15px_rgba(60,203,87,0.3)]"
+            className="w-full sm:w-auto px-6 py-2.5 rounded-xl font-bold text-xs bg-[#3ccb57] text-black hover:bg-[#4ade67] transition-all flex items-center justify-center gap-2 cursor-pointer shadow-[0_0_15px_rgba(60,203,87,0.3)]"
           >
             {isGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <span>Submit for AI Evaluation</span>}
           </button>
@@ -278,23 +283,23 @@ export const ProgResultsView: React.FC<{
   progResults: { score: number; feedback: string };
   onBack: () => void;
 }> = ({ activeProg, progResults, onBack }) => (
-  <div className="w-full max-w-4xl mx-auto h-[82vh] overflow-y-auto pr-2 space-y-5 text-left animate-fade-in pb-4">
-    <div className="p-7 rounded-2xl border border-white/10 bg-[#060c20]/90 flex justify-between items-center shadow-lg">
+  <div className="w-full max-w-4xl mx-auto max-h-full sm:h-[82vh] overflow-y-auto pr-1 sm:pr-2 space-y-4 sm:space-y-5 text-left animate-fade-in pb-4">
+    <div className="p-4 sm:p-7 rounded-xl sm:rounded-2xl border border-white/10 bg-[#060c20]/90 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 shadow-lg">
       <div>
-        <span className="text-xs font-mono text-[#3ccb57] uppercase font-bold block mb-1">Evaluation Finalized</span>
-        <h2 className="text-2xl font-black text-white">{activeProg?.title}</h2>
+        <span className="text-[10px] sm:text-xs font-mono text-[#3ccb57] uppercase font-bold block mb-1">Evaluation Finalized</span>
+        <h2 className="text-xl sm:text-2xl font-black text-white">{activeProg?.title}</h2>
       </div>
-      <div className="text-right">
-        <span className="text-4xl font-black text-[#3ccb57] font-mono">{progResults.score}/100</span>
+      <div className="sm:text-right">
+        <span className="text-3xl sm:text-4xl font-black text-[#3ccb57] font-mono">{progResults.score}/100</span>
         <span className="block text-[10px] text-slate-400 uppercase mt-0.5">Code Score</span>
       </div>
     </div>
-    <div className="p-6 rounded-2xl bg-[#060c20]/90 border border-white/10 space-y-3">
+    <div className="p-4 sm:p-6 rounded-xl sm:rounded-2xl bg-[#060c20]/90 border border-white/10 space-y-3">
       <h3 className="text-xs font-bold text-slate-400 uppercase">AI Mentor Feedback</h3>
       <p className="text-xs sm:text-sm text-slate-200 leading-relaxed whitespace-pre-wrap">{progResults.feedback}</p>
     </div>
     <div className="text-center pt-2">
-      <button onClick={onBack} className="px-8 py-3 rounded-xl font-bold text-xs bg-[#3ccb57] text-black hover:bg-[#4ade67] transition-all shadow-[0_0_20px_rgba(60,203,87,0.3)] cursor-pointer">
+      <button onClick={onBack} className="w-full sm:w-auto px-8 py-3 rounded-xl font-bold text-xs bg-[#3ccb57] text-black hover:bg-[#4ade67] transition-all shadow-[0_0_20px_rgba(60,203,87,0.3)] cursor-pointer">
         Back to Station
       </button>
     </div>
@@ -315,19 +320,19 @@ export const ActiveAnalysisView: React.FC<{
   onAbandon: () => void;
   onSubmit: () => void;
 }> = ({ activeAnalysis, analysisDifficulty, predictedOutputInput, setPredictedOutputInput, scratchpadNotes, setScratchpadNotes, isGenerating, onAbandon, onSubmit }) => (
-  <div className="w-full max-w-6xl mx-auto h-[82vh] overflow-y-auto pr-2 space-y-5 text-left animate-fade-in pb-4">
-    <div className="flex justify-between items-center p-4 rounded-2xl bg-[#060c20]/90 border border-white/10 backdrop-blur-xl">
+  <div className="w-full max-w-6xl mx-auto max-h-full sm:h-[82vh] overflow-y-auto pr-1 sm:pr-2 space-y-4 sm:space-y-5 text-left animate-fade-in pb-4">
+    <div className="flex justify-between items-center p-3.5 sm:p-4 rounded-xl sm:rounded-2xl bg-[#060c20]/90 border border-white/10 backdrop-blur-xl">
       <div>
         <span className="text-[10px] font-mono text-[#3ccb57] font-bold uppercase tracking-wider block">
           Mental Execution Drill · {analysisDifficulty.toUpperCase()}
         </span>
-        <h2 className="text-xl font-bold text-white tracking-tight">{activeAnalysis.title}</h2>
+        <h2 className="text-lg sm:text-xl font-bold text-white tracking-tight">{activeAnalysis.title}</h2>
       </div>
       <button onClick={onAbandon} className="text-xs text-red-400 hover:text-red-300 cursor-pointer font-semibold">Abandon Drill</button>
     </div>
 
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-      <div className="lg:col-span-7 p-6 rounded-2xl bg-[#060c20]/90 border border-white/10 space-y-3">
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6">
+      <div className="lg:col-span-7 p-4 sm:p-6 rounded-xl sm:rounded-2xl bg-[#060c20]/90 border border-white/10 space-y-3">
         <div className="flex justify-between items-center">
           <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
             <Brain className="h-4 w-4 text-[#3ccb57]" /> Trace in your head (No IDE!)
@@ -336,13 +341,13 @@ export const ActiveAnalysisView: React.FC<{
             {activeAnalysis.language}
           </span>
         </div>
-        <pre className="p-4 rounded-xl bg-black/80 border border-white/15 text-xs font-mono text-slate-200 overflow-x-auto leading-relaxed">
+        <pre className="p-3.5 sm:p-4 rounded-xl bg-black/80 border border-white/15 text-xs font-mono text-slate-200 overflow-x-auto leading-relaxed">
           <code>{activeAnalysis.trickyCode}</code>
         </pre>
         <p className="text-[11px] text-slate-400">Step through loops in your head. What exact text will print to stdout?</p>
       </div>
 
-      <div className="lg:col-span-5 p-6 rounded-2xl bg-[#060c20]/90 border border-white/10 flex flex-col justify-between space-y-4">
+      <div className="lg:col-span-5 p-4 sm:p-6 rounded-xl sm:rounded-2xl bg-[#060c20]/90 border border-white/10 flex flex-col justify-between space-y-4">
         <div className="space-y-4">
           <div>
             <label className="block text-xs font-bold text-white uppercase tracking-wider mb-1.5">
@@ -354,18 +359,18 @@ export const ActiveAnalysisView: React.FC<{
               value={predictedOutputInput}
               onChange={(e) => setPredictedOutputInput(e.target.value)}
               placeholder="e.g. 24 or 0 2 6 12"
-              className="w-full p-3.5 rounded-xl bg-black/70 border border-white/20 text-sm font-mono text-white focus:outline-none focus:border-[#3ccb57]"
+              className="w-full p-3 sm:p-3.5 rounded-xl bg-black/70 border border-white/20 text-sm font-mono text-white focus:outline-none focus:border-[#3ccb57]"
             />
           </div>
 
           <div>
             <label className="block text-xs font-semibold text-slate-300 mb-1">Scratchpad / Notes (Optional)</label>
             <textarea
-              rows={8}
+              rows={5}
               value={scratchpadNotes}
               onChange={(e) => setScratchpadNotes(e.target.value)}
               placeholder="Jot down loop variables: i=0 j=1 sum=2..."
-              className="w-full p-3 rounded-xl bg-black/50 border border-white/10 text-xs font-mono text-slate-300 focus:outline-none focus:border-[#3ccb57]"
+              className="w-full p-2.5 sm:p-3 rounded-xl bg-black/50 border border-white/10 text-xs font-mono text-slate-300 focus:outline-none focus:border-[#3ccb57]"
             />
           </div>
         </div>
@@ -394,21 +399,21 @@ export const AnalysisResultsView: React.FC<{
 }> = ({ activeAnalysis, analysisResults, predictedOutputInput, onBack }) => {
   const isSuccess = analysisResults.score === 100;
   return (
-    <div className="w-full max-w-4xl mx-auto h-[82vh] overflow-y-auto pr-2 space-y-5 text-left animate-fade-in pb-4">
-      <div className="p-7 rounded-2xl border border-white/10 bg-[#060c20]/90 backdrop-blur-2xl flex justify-between items-center shadow-lg">
+    <div className="w-full max-w-4xl mx-auto max-h-full sm:h-[82vh] overflow-y-auto pr-1 sm:pr-2 space-y-4 sm:space-y-5 text-left animate-fade-in pb-4">
+      <div className="p-4 sm:p-7 rounded-xl sm:rounded-2xl border border-white/10 bg-[#060c20]/90 backdrop-blur-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 shadow-lg">
         <div>
-          <span className="text-xs font-mono text-[#3ccb57] uppercase font-bold block mb-1">Audit Evaluated</span>
-          <h2 className="text-2xl font-black text-white">{activeAnalysis?.title}</h2>
+          <span className="text-[10px] sm:text-xs font-mono text-[#3ccb57] uppercase font-bold block mb-1">Audit Evaluated</span>
+          <h2 className="text-xl sm:text-2xl font-black text-white">{activeAnalysis?.title}</h2>
         </div>
-        <div className="text-right">
-          <span className={`text-4xl font-black font-mono ${isSuccess ? 'text-[#3ccb57]' : 'text-amber-400'}`}>
+        <div className="sm:text-right">
+          <span className={`text-3xl sm:text-4xl font-black font-mono ${isSuccess ? 'text-[#3ccb57]' : 'text-amber-400'}`}>
             {analysisResults.score}/100
           </span>
           <span className="block text-[10px] text-slate-400 uppercase mt-0.5">Execution Score</span>
         </div>
       </div>
 
-      <div className="p-5 rounded-2xl border border-white/10 bg-[#060c20]/80 space-y-3">
+      <div className="p-4 sm:p-5 rounded-xl sm:rounded-2xl border border-white/10 bg-[#060c20]/80 space-y-3">
         <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Output Comparison</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs font-mono">
           <div className="p-3 rounded-xl bg-black/60 border border-white/10">
@@ -424,7 +429,7 @@ export const AnalysisResultsView: React.FC<{
         </div>
       </div>
 
-      <div className="p-6 rounded-2xl bg-[#060c20]/90 border border-white/10 space-y-3">
+      <div className="p-4 sm:p-6 rounded-xl sm:rounded-2xl bg-[#060c20]/90 border border-white/10 space-y-3">
         <h3 className="text-xs font-bold text-[#3ccb57] uppercase tracking-wider flex items-center gap-1.5">
           <CheckCircle2 className="h-4 w-4" /> Step-by-Step Execution Breakdown
         </h3>
@@ -432,7 +437,7 @@ export const AnalysisResultsView: React.FC<{
       </div>
 
       <div className="text-center pt-2">
-        <button onClick={onBack} className="px-8 py-3 rounded-xl font-bold text-xs bg-[#3ccb57] text-black hover:bg-[#4ade67] transition-all shadow-[0_0_20px_rgba(60,203,87,0.3)] cursor-pointer">
+        <button onClick={onBack} className="w-full sm:w-auto px-8 py-3 rounded-xl font-bold text-xs bg-[#3ccb57] text-black hover:bg-[#4ade67] transition-all shadow-[0_0_20px_rgba(60,203,87,0.3)] cursor-pointer">
           Return to Station
         </button>
       </div>

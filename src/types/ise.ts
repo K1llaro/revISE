@@ -31,6 +31,10 @@ export interface QuestionReviewDetail {
   isCorrect: boolean;
   points: number;
   explanation: string;
+  topic?: string;
+  slideTitle?: string;
+  questionType?: QuizQuestion['type'];
+  responseTimeSeconds?: number;
 }
 
 export interface TestHistoryItem {
@@ -68,6 +72,14 @@ export interface QuizQuestion {
   options?: string[];
   correctAnswers: string[];
   explanation: string;
+  topic?: string;
+  slideTitle?: string;
+}
+
+export interface StudyMaterial {
+  title: string;
+  tagName: string;
+  summary: string;
 }
 
 export interface ProgrammingChallenge {

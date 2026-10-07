@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Brain, Code2, Bug, Upload, Settings, History, Shield, Trophy } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-import type { UserSession, StudyYear, ActiveModal, AppView, TestHistoryItem, FlaggedMaterial, AttachedFile, QuizQuestion, ProgrammingChallenge, CodeAnalysisDrill, QuestionReviewDetail, LeaderboardEntry } from '../../types/ise';
+import type { UserSession, StudyYear, ActiveModal, AppView, TestHistoryItem, FlaggedMaterial, AttachedFile, QuizQuestion, ProgrammingChallenge, CodeAnalysisDrill, QuestionReviewDetail, LeaderboardEntry, StudyMaterial } from '../../types/ise';
 import { DEFAULT_YEAR_PROMPTS } from '../../lib/constants';
 import { callGemini } from '../../lib/gemini';
 import { ActiveQuizView, QuizResultsView, ActiveProgView, ProgResultsView, ActiveAnalysisView, AnalysisResultsView } from './ActiveViews';
@@ -45,6 +45,8 @@ export const AuthenticatedWorkspace: React.FC<{
 
   const [historyList, setHistoryList] = useState<TestHistoryItem[]>([]);
   const [flaggedItems, setFlaggedItems] = useState<FlaggedMaterial[]>([]);
+  const [studyMaterials, setStudyMaterials] = useState<StudyMaterial[]>([]);
+  const [studyMaterialsError, setStudyMaterialsError] = useState<string | null>(null);
 
   // Leaderboard Data
   const [leaderboardEntries, setLeaderboardEntries] = useState<LeaderboardEntry[]>([]);
@@ -65,6 +67,8 @@ export const AuthenticatedWorkspace: React.FC<{
   const [quizAttachedFiles, setQuizAttachedFiles] = useState<AttachedFile[]>([]);
   const [activeQuiz, setActiveQuiz] = useState<{ title: string; questions: QuizQuestion[]; timeLimit: number } | null>(null);
   const [userAnswers, setUserAnswers] = useState<Record<number, string[]>>({});
+  const quizStartedAtRef = useRef<number | null>(null);
+  const questionResponseTimesRef = useRef<Record<number, number>>({});
   const [quizTimeLeft, setQuizTimeLeft] = useState(0);
   const [quizResults, setQuizResults] = useState<{ score: number; details: any[] } | null>(null);
 
@@ -192,6 +196,32 @@ export const AuthenticatedWorkspace: React.FC<{
       setLeaderboardEntries(entries);
     }
     setIsLoadingLeaderboard(false);
+  };
+
+  const fetchStudyMaterials = async (tagName?: string) => {
+    let query = supabase
+      .from('curriculum_materials')
+      .select('title, tag_name, content_text')
+      .eq('status', 'approved')
+      .order('created_at', { ascending: false })
+      .limit(40);
+
+    if (tagName) query = query.eq('tag_name', tagName);
+
+    const { data, error } = await query;
+    if (error) {
+      setStudyMaterialsError(error.message);
+      throw error;
+    }
+
+    const materials = (data || []).map((item) => ({
+      title: item.title || 'Untitled material',
+      tagName: item.tag_name || '#General',
+      summary: item.content_text || '',
+    }));
+    setStudyMaterials(materials);
+    setStudyMaterialsError(null);
+    return materials;
   };
 
   const loadData = async () => {
@@ -334,6 +364,14 @@ export const AuthenticatedWorkspace: React.FC<{
 
     const questionCount = quizCustomCount ? parseInt(quizCustomCount, 10) : quizQuestionCount;
     const minutes = quizCustomTimer ? parseInt(quizCustomTimer, 10) : quizTimerMinutes;
+    let linkedMaterials: StudyMaterial[];
+    try {
+      linkedMaterials = await fetchStudyMaterials(selectedTag || undefined);
+    } catch (error) {
+      setIsGenerating(false);
+      setGenerationError(error instanceof Error ? error.message : 'Could not load approved study materials.');
+      return;
+    }
 
     const allowedFormats: string[] = [];
     if (quizTypes.single) allowedFormats.push('single-choice');
@@ -357,11 +395,15 @@ Existing Curriculum Tags in Database: [${availableTags.join(', ')}]
 Allowed Formats: ${allowedFormats.join(', ')}
 User Custom Prompt: ${quizPrompt || 'Comprehensive module exam'}
 User Preferred Title: ${quizCustomTitle || 'None'}
+Approved Supabase study materials for this topic:
+${linkedMaterials.map((material) => `- Title: ${material.title}\n  Tag: ${material.tagName}\n  Summary: ${material.summary.slice(0, 900)}`).join('\n').slice(0, 7000) || 'No approved material found for this tag.'}
 
 CRITICAL AUDIT INSTRUCTIONS:
 1. Inspect attached files: If vendor software (Dell, Intel), installers, or memes -> contentVerdict = "rejected". If legitimate CS learning material -> contentVerdict = "approved". If niche -> contentVerdict = "flagged".
-2. If genuine slides attached, QUIZ MUST BE 100% STRICTLY BASED ON THE ATTACHED MATERIALS!
-3. If approved/flagged, reuse an existing tag from the database or create a new hashtag starting with '#' (e.g. #Comp_Org_Buses).
+2. When approved Supabase study materials are listed, base questions on them and use the exact slide/section heading from a material summary as slideTitle. If no heading is listed, use the exact material title; leave slideTitle empty only when no listed material supports the question.
+3. If genuine slides are attached, the quiz must also be strictly based on the attached materials.
+4. If approved/flagged, reuse an existing tag from the database or create a new hashtag starting with '#' (e.g. #Comp_Org_Buses).
+5. Give every question a concise topic suitable for a learning-mastery report.
 
 Task: Generate exactly ${questionCount} questions.
 Output strictly as JSON without markdown:
@@ -377,7 +419,9 @@ Output strictly as JSON without markdown:
       "type": "single" | "multiple" | "text",
       "options": ["opt1", "opt2", "opt3", "opt4"],
       "correctAnswers": ["exact match string"],
-      "explanation": "string"
+      "explanation": "string",
+      "topic": "short concept name",
+      "slideTitle": "exact slide/section heading or material title from listed Supabase materials, or empty string"
     }
   ]
 }
@@ -400,12 +444,28 @@ Output strictly as JSON without markdown:
 
       setActiveQuiz({
         title: finalTitle,
-        questions: data.questions,
+        questions: data.questions.map((question: QuizQuestion) => {
+          const slideTitle = (question.slideTitle || '').trim();
+          const matchedMaterial = linkedMaterials.find(
+            (material) => {
+              const normalizedSlideTitle = slideTitle.toLowerCase();
+              return normalizedSlideTitle === material.title.toLowerCase()
+                || (normalizedSlideTitle.length > 0 && material.summary.toLowerCase().includes(normalizedSlideTitle));
+            }
+          );
+          return {
+            ...question,
+            topic: question.topic?.trim() || undefined,
+            slideTitle: matchedMaterial ? slideTitle || matchedMaterial.title : undefined,
+          };
+        }),
         timeLimit: minutes,
       });
 
       setUserAnswers({});
+      questionResponseTimesRef.current = {};
       setQuizTimeLeft(minutes * 60);
+      quizStartedAtRef.current = Date.now();
       setIsGenerating(false);
       setActiveModal('none');
       setCurrentView('active_quiz');
@@ -452,11 +512,18 @@ Output strictly as JSON without markdown:
         isCorrect,
         points: pts,
         explanation: q.explanation,
+        topic: q.topic,
+        slideTitle: q.slideTitle,
+        questionType: q.type,
+        responseTimeSeconds: questionResponseTimesRef.current[q.id],
       });
     });
 
     const finalScore = Math.round((scoreTotal / activeQuiz.questions.length) * 100);
     const earnedPoints = calculatePoints(finalScore, 'Standard');
+    const elapsedSeconds = quizStartedAtRef.current
+      ? Math.max(1, Math.round((Date.now() - quizStartedAtRef.current) / 1000))
+      : activeQuiz.timeLimit * 60;
 
     const wrongQuestions = reviewDetails.filter((r) => !r.isCorrect);
     let weakSpotsAdvice = 'Excellent performance! You mastered all tested concepts.';
@@ -467,21 +534,28 @@ Output strictly as JSON without markdown:
     const payloadFeedback = JSON.stringify({
       weakSpotsAdvice,
       details: reviewDetails,
+      durationSeconds: elapsedSeconds,
     });
 
     const fullTitle = `${selectedTag ? selectedTag + ' · ' : ''}${activeQuiz.title}`;
 
-    await supabase.from('test_history').insert({
+    const { error } = await supabase.from('test_history').insert({
       user_id: user.id,
       title: fullTitle,
       type: 'Quiz',
       score: finalScore,
       max_score: 100,
       points_earned: earnedPoints,
-      time_spent: `${activeQuiz.timeLimit}m`,
+      time_spent: `${Math.floor(elapsedSeconds / 60)}m ${elapsedSeconds % 60}s`,
       ai_feedback: payloadFeedback,
     });
 
+    if (error) {
+      alert(`Could not save quiz results: ${error.message}`);
+      return;
+    }
+
+    quizStartedAtRef.current = null;
     loadData();
     setQuizResults({ score: finalScore, details: reviewDetails });
     setCurrentView('quiz_results');
@@ -771,8 +845,11 @@ Output strictly as JSON without markdown:
     const key = user.apiKey || localStorage.getItem('gemini_api_key');
     if (!key) return alert('Enter Gemini API key in Settings!');
 
-    const combinedContent = [uploadText, ...ingestionFiles.map((f) => `[File: ${f.name}]\n${f.content}`)].join('\n\n').trim();
-    if (!combinedContent) return alert('Please attach files or paste notes first!');
+    const combinedContent = [
+      uploadText,
+      ...ingestionFiles.filter((file) => !file.isPdf).map((file) => `[File: ${file.name}]\n${file.textContent || file.content}`),
+    ].join('\n\n').trim();
+    if (!combinedContent && ingestionFiles.length === 0) return alert('Please attach files or paste notes first!');
 
     setUploadStatus('Analyzing & Moderating material with Google AI...');
 
@@ -780,7 +857,8 @@ Output strictly as JSON without markdown:
 You are the Curriculum Director and Strict Gatekeeper for ISE at University of Limerick.
 Student Year: ${currentYear}
 Existing Curriculum Tags in Database: [${availableTags.join(', ')}]
-Content to inspect:
+Attached filenames: ${ingestionFiles.map((file) => file.name).join(', ') || 'Pasted notes'}
+Text content to inspect:
 """
 ${combinedContent.slice(0, 10000)}
 """
@@ -794,6 +872,7 @@ CRITICAL AUDIT INSTRUCTIONS:
    - ONLY genuine academic Computer Science / Software Engineering teaching materials.
 3. If valid but weird/niche -> verdict = "flagged" for admin manual audit.
 4. Tag Generation: First inspect "Existing Curriculum Tags in Database". If content matches an existing tag, REUSE IT. Do not invent slight spelling variations. Otherwise create a concise tag starting with '#' (e.g. #Comp_Org_Buses, #Java_OOP).
+5. For PDFs, inspect the attached pages directly. Keep cleanSummary under 1,600 characters, preserve exact slide/section titles and concise key concepts so future quizzes can cite the correct material. Do not copy full slide text.
 
 Output strictly as JSON without markdown:
 {
@@ -801,11 +880,15 @@ Output strictly as JSON without markdown:
   "tagName": "string (starts with #, max 25 chars)",
   "title": "string",
   "reason": "string",
-  "cleanSummary": "string"
+  "cleanSummary": "string (compact, max 1600 characters; retain exact slide/section titles)"
 }
 `;
     try {
-      const result = await callGemini(key, promptText, false);
+      const requestParts: any[] = ingestionFiles
+        .filter((file) => file.isPdf && file.base64Data)
+        .map((file) => ({ inlineData: { mimeType: 'application/pdf', data: file.base64Data } }));
+      requestParts.push({ text: promptText });
+      const result = await callGemini(key, requestParts, false);
 
       if (result.verdict === 'rejected') {
         setUploadStatus(`❌ Rejected: ${result.reason} (Zero records saved).`);
@@ -821,7 +904,7 @@ Output strictly as JSON without markdown:
         submitter_email: user.email,
         title: result.title || 'Lecture Summary',
         tag_name: result.tagName || '#General',
-        content_text: result.cleanSummary || combinedContent.slice(0, 5000),
+        content_text: (result.cleanSummary || combinedContent).slice(0, 1600),
         status: result.verdict,
         ai_verdict_reason: result.reason,
       });
@@ -841,6 +924,24 @@ Output strictly as JSON without markdown:
     if (action === 'approve') await supabase.from('curriculum_materials').update({ status: 'approved' }).eq('id', id);
     else await supabase.from('curriculum_materials').delete().eq('id', id);
     loadData();
+  };
+
+  const handleStartWeakQuiz = (topics: Array<{ topic: string; tagName: string }>) => {
+    const topicList = topics.map((item) => item.topic);
+    const primaryTag = topics[0]?.tagName;
+    setSelectedTag(primaryTag || '');
+    setQuizCustomTitle('Weak Areas Review');
+    setQuizQuestionCount(10);
+    setQuizCustomCount('');
+    setQuizTimerMinutes(15);
+    setQuizCustomTimer('');
+    setQuizTypes({ mcq: true, text: false, single: true });
+    setQuizPrompt(
+      `Create a focused review quiz only for these weak topics: ${topicList.join(', ')}. Prioritize concepts with the lowest mastery. Use the approved Supabase study materials for the selected tag and do not introduce unrelated topics.`
+    );
+    setQuizAttachedFiles([]);
+    setGenerationError(null);
+    setActiveModal('quiz');
   };
 
   const handleConsentAccepted = async (realName?: string) => {
@@ -899,6 +1000,16 @@ Output strictly as JSON without markdown:
         quizTimeLeft={quizTimeLeft}
         userAnswers={userAnswers}
         setUserAnswers={setUserAnswers}
+        onAnswerStarted={(questionId) => {
+          const question = activeQuiz.questions.find((item) => item.id === questionId);
+          if (!question || question.type === 'text' || questionResponseTimesRef.current[questionId] !== undefined) return;
+          if (quizStartedAtRef.current) {
+            questionResponseTimesRef.current[questionId] = Math.max(
+              1,
+              Math.round((Date.now() - quizStartedAtRef.current) / 1000)
+            );
+          }
+        }}
         selectedTag={selectedTag}
         quizScoringMode={quizScoringMode}
         onAbandon={() => setCurrentView('station')}
@@ -913,40 +1024,40 @@ Output strictly as JSON without markdown:
 
   /* RENDER DASHBOARD */
   return (
-    <div className="w-full max-w-6xl mx-auto space-y-8 animate-fade-in text-left">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-white/10 pb-5">
-        <div>
-          <div className="flex items-center gap-2.5">
-            <img src="/favicon.svg" alt="revISE Logo" className="h-6 w-6 shrink-0 object-contain" />
-            <h1 className="text-2xl font-black text-white leading-none flex items-center">
+    <div className="w-full max-w-6xl mx-auto space-y-5 sm:space-y-8 animate-fade-in text-left">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 border-b border-white/10 pb-4 sm:pb-5">
+        <div className="w-full sm:w-auto">
+          <div className="flex flex-wrap items-center gap-2">
+            <img src="/favicon.svg" alt="revISE Logo" className="h-5 w-5 sm:h-6 sm:w-6 shrink-0 object-contain" />
+            <h1 className="text-xl sm:text-2xl font-black text-white leading-none flex flex-wrap items-center">
               <span>rev</span><span className="text-[#3ccb57]">ISE</span>
-              <span className="text-slate-500 font-normal mx-2 text-lg">·</span>
+              <span className="text-slate-500 font-normal mx-1.5 sm:mx-2 text-base sm:text-lg">·</span>
               <span
                 onClick={handleShuffleSubtitle}
                 title="Click to roll another tagline!"
-                className="text-slate-200 font-semibold cursor-pointer hover:text-[#3ccb57] transition-colors select-none"
+                className="text-slate-200 font-semibold cursor-pointer hover:text-[#3ccb57] transition-colors select-none text-sm sm:text-base"
               >
                 {subtitle}
               </span>
             </h1>
-            <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-full bg-[#3ccb57]/10 text-[10px] font-mono text-[#3ccb57] uppercase font-bold border border-[#3ccb57]/30 leading-none">
+            <span className="inline-flex items-center justify-center px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full bg-[#3ccb57]/10 text-[9px] sm:text-[10px] font-mono text-[#3ccb57] uppercase font-bold border border-[#3ccb57]/30 leading-none">
               {currentYear.toUpperCase()}
             </span>
           </div>
-          <p className="text-xs text-slate-400 mt-1">
-            Student: <strong className="text-white">{user.nickname || user.email}</strong> ·{' '}
+          <p className="text-[11px] sm:text-xs text-slate-400 mt-1">
+            Student: <strong className="text-white truncate inline-block max-w-[180px] sm:max-w-none align-bottom">{user.nickname || user.email}</strong> ·{' '}
             {user.apiKey ? <span className="text-[#3ccb57]">AI Studio Active</span> : <span className="text-amber-400">No Key in Settings</span>}
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap w-full sm:w-auto justify-start sm:justify-end">
           {isAdmin && (
             <button
               onClick={() => {
                 loadData();
                 setActiveModal('admin');
               }}
-              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-amber-300 bg-amber-950/30 hover:bg-amber-950/50 border border-amber-500/40 rounded-xl cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 text-[11px] sm:text-xs font-bold text-amber-300 bg-amber-950/30 hover:bg-amber-950/50 border border-amber-500/40 rounded-xl cursor-pointer"
             >
               <Shield className="h-3.5 w-3.5" />
               <span>Admin ({flaggedItems.length})</span>
@@ -959,7 +1070,7 @@ Output strictly as JSON without markdown:
               fetchLeaderboardData();
               setActiveModal('leaderboard');
             }}
-            className="px-3.5 py-2 text-xs font-semibold bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl flex items-center gap-1.5 cursor-pointer shadow-sm hover:border-[#3ccb57]/40 text-slate-200 hover:text-white"
+            className="px-2.5 sm:px-3.5 py-1.5 sm:py-2 text-[11px] sm:text-xs font-semibold bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl flex items-center gap-1.5 cursor-pointer shadow-sm hover:border-[#3ccb57]/40 text-slate-200 hover:text-white"
           >
             <Trophy className="h-3.5 w-3.5 text-[#3ccb57]" />
             <span>Leaderboard</span>
@@ -968,102 +1079,103 @@ Output strictly as JSON without markdown:
           <button
             onClick={() => {
               loadData();
+              fetchStudyMaterials().catch(() => undefined);
               setActiveModal('history');
             }}
-            className="px-3.5 py-2 text-xs font-semibold bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl flex items-center gap-1.5 cursor-pointer shadow-sm"
+            className="px-2.5 sm:px-3.5 py-1.5 sm:py-2 text-[11px] sm:text-xs font-semibold bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl flex items-center gap-1.5 cursor-pointer shadow-sm"
           >
             <History className="h-3.5 w-3.5 text-[#3ccb57]" />
-            <span>History</span>
+            <span>History &amp; Statistics</span>
           </button>
 
           <button
             onClick={() => setActiveModal('settings')}
-            className="px-3.5 py-2 text-xs font-semibold bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl flex items-center gap-1.5 cursor-pointer shadow-sm"
+            className="px-2.5 sm:px-3.5 py-1.5 sm:py-2 text-[11px] sm:text-xs font-semibold bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl flex items-center gap-1.5 cursor-pointer shadow-sm"
           >
             <Settings className="h-3.5 w-3.5" />
             <span>Settings</span>
           </button>
 
-          <button onClick={onSignOut} className="px-3.5 py-2 text-xs font-semibold text-red-400 bg-red-950/20 border border-red-500/20 rounded-xl cursor-pointer">
+          <button onClick={onSignOut} className="px-2.5 sm:px-3.5 py-1.5 sm:py-2 text-[11px] sm:text-xs font-semibold text-red-400 bg-red-950/20 border border-red-500/20 rounded-xl cursor-pointer">
             Sign Out
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
         {/* CARD 1: Quiz Test */}
-        <div onClick={() => setActiveModal('quiz')} className="group relative rounded-3xl border border-white/10 bg-[#060c20]/85 hover:border-sky-400/50 p-8 lg:p-9 flex flex-col justify-between min-h-[330px] lg:min-h-[360px] cursor-pointer backdrop-blur-xl transition-all duration-300 shadow-2xl hover:shadow-[0_0_40px_rgba(56,189,248,0.2)] hover:-translate-y-1.5">
-          <div className="absolute top-6 right-6 flex items-center">
-            <span className="h-3.5 w-3.5 rounded-full bg-sky-400 shadow-[0_0_15px_#38bdf8]" />
+        <div onClick={() => setActiveModal('quiz')} className="group relative rounded-2xl sm:rounded-3xl border border-white/10 bg-[#060c20]/85 hover:border-sky-400/50 p-5 sm:p-7 lg:p-9 flex flex-col justify-between min-h-[220px] sm:min-h-[280px] lg:min-h-[340px] cursor-pointer backdrop-blur-xl transition-all duration-300 shadow-2xl hover:shadow-[0_0_40px_rgba(56,189,248,0.2)] hover:-translate-y-1.5">
+          <div className="absolute top-5 right-5 sm:top-6 sm:right-6 flex items-center">
+            <span className="h-3 w-3 sm:h-3.5 sm:w-3.5 rounded-full bg-sky-400 shadow-[0_0_15px_#38bdf8]" />
           </div>
 
           <div>
-            <div className="h-16 w-16 rounded-2xl bg-sky-400/10 text-sky-400 flex items-center justify-center mb-6 border border-sky-400/20 group-hover:scale-110 transition-transform">
-              <Brain className="h-8 w-8" />
+            <div className="h-12 w-12 sm:h-14 sm:w-14 lg:h-16 lg:w-16 rounded-xl sm:rounded-2xl bg-sky-400/10 text-sky-400 flex items-center justify-center mb-4 sm:mb-6 border border-sky-400/20 group-hover:scale-110 transition-transform">
+              <Brain className="h-6 w-6 sm:h-7 sm:w-7 lg:h-8 lg:w-8" />
             </div>
-            <h2 className="text-2xl lg:text-3xl font-black text-white tracking-tight">Quiz Test</h2>
-            <p className="text-sm lg:text-base text-slate-300 mt-3 leading-relaxed font-normal">
+            <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-white tracking-tight">Quiz Test</h2>
+            <p className="text-xs sm:text-sm lg:text-base text-slate-300 mt-2 sm:mt-3 leading-relaxed font-normal">
               Dynamic timed tests with single/multiple choice options, deep reasoning, and strict or partial credit.
             </p>
           </div>
-          <div className="pt-4 border-t border-white/5 flex items-center justify-between">
-            <span className="text-sm lg:text-base text-sky-400 font-bold group-hover:underline">Launch Quiz →</span>
+          <div className="pt-3 sm:pt-4 border-t border-white/5 flex items-center justify-between">
+            <span className="text-xs sm:text-sm lg:text-base text-sky-400 font-bold group-hover:underline">Launch Quiz →</span>
           </div>
         </div>
 
         {/* CARD 2: Programming Exercises */}
-        <div onClick={() => setActiveModal('programming')} className="group relative rounded-3xl border border-white/10 bg-[#060c20]/85 hover:border-[#3ccb57]/50 p-8 lg:p-9 flex flex-col justify-between min-h-[330px] lg:min-h-[360px] cursor-pointer backdrop-blur-xl transition-all duration-300 shadow-2xl hover:shadow-[0_0_40px_rgba(60,203,87,0.2)] hover:-translate-y-1.5">
-          <div className="absolute top-6 right-6 flex items-center">
-            <span className="h-3.5 w-3.5 rounded-full bg-[#3ccb57] shadow-[0_0_15px_#3ccb57]" />
+        <div onClick={() => setActiveModal('programming')} className="group relative rounded-2xl sm:rounded-3xl border border-white/10 bg-[#060c20]/85 hover:border-[#3ccb57]/50 p-5 sm:p-7 lg:p-9 flex flex-col justify-between min-h-[220px] sm:min-h-[280px] lg:min-h-[340px] cursor-pointer backdrop-blur-xl transition-all duration-300 shadow-2xl hover:shadow-[0_0_40px_rgba(60,203,87,0.2)] hover:-translate-y-1.5">
+          <div className="absolute top-5 right-5 sm:top-6 sm:right-6 flex items-center">
+            <span className="h-3 w-3 sm:h-3.5 sm:w-3.5 rounded-full bg-[#3ccb57] shadow-[0_0_15px_#3ccb57]" />
           </div>
 
           <div>
-            <div className="h-16 w-16 rounded-2xl bg-[#3ccb57]/10 text-[#3ccb57] flex items-center justify-center mb-6 border border-[#3ccb57]/20 group-hover:scale-110 transition-transform">
-              <Code2 className="h-8 w-8" />
+            <div className="h-12 w-12 sm:h-14 sm:w-14 lg:h-16 lg:w-16 rounded-xl sm:rounded-2xl bg-[#3ccb57]/10 text-[#3ccb57] flex items-center justify-center mb-4 sm:mb-6 border border-[#3ccb57]/20 group-hover:scale-110 transition-transform">
+              <Code2 className="h-6 w-6 sm:h-7 sm:w-7 lg:h-8 lg:w-8" />
             </div>
-            <h2 className="text-2xl lg:text-3xl font-black text-white tracking-tight">Programming Exercises</h2>
-            <p className="text-sm lg:text-base text-slate-300 mt-3 leading-relaxed font-normal">
+            <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-white tracking-tight">Programming Exercises</h2>
+            <p className="text-xs sm:text-sm lg:text-base text-slate-300 mt-2 sm:mt-3 leading-relaxed font-normal">
               Structured Java lab exercises with objectives, requirements, pattern rules, and example outputs.
             </p>
           </div>
-          <div className="pt-4 border-t border-white/5 flex items-center justify-between">
-            <span className="text-sm lg:text-base text-[#3ccb57] font-bold group-hover:underline">Write Code →</span>
+          <div className="pt-3 sm:pt-4 border-t border-white/5 flex items-center justify-between">
+            <span className="text-xs sm:text-sm lg:text-base text-[#3ccb57] font-bold group-hover:underline">Write Code →</span>
           </div>
         </div>
 
         {/* CARD 3: Code Analysis */}
-        <div onClick={() => setActiveModal('analysis')} className="group relative rounded-3xl border border-white/10 bg-[#060c20]/85 hover:border-orange-400/50 p-8 lg:p-9 flex flex-col justify-between min-h-[330px] lg:min-h-[360px] cursor-pointer backdrop-blur-xl transition-all duration-300 shadow-2xl hover:shadow-[0_0_40px_rgba(251,146,60,0.2)] hover:-translate-y-1.5">
-          <div className="absolute top-6 right-6 flex items-center">
-            <span className="h-3.5 w-3.5 rounded-full bg-orange-400 shadow-[0_0_15px_#fb923c]" />
+        <div onClick={() => setActiveModal('analysis')} className="group relative rounded-2xl sm:rounded-3xl border border-white/10 bg-[#060c20]/85 hover:border-orange-400/50 p-5 sm:p-7 lg:p-9 flex flex-col justify-between min-h-[220px] sm:min-h-[280px] lg:min-h-[340px] cursor-pointer backdrop-blur-xl transition-all duration-300 shadow-2xl hover:shadow-[0_0_40px_rgba(251,146,60,0.2)] hover:-translate-y-1.5">
+          <div className="absolute top-5 right-5 sm:top-6 sm:right-6 flex items-center">
+            <span className="h-3 w-3 sm:h-3.5 sm:w-3.5 rounded-full bg-orange-400 shadow-[0_0_15px_#fb923c]" />
           </div>
 
           <div>
-            <div className="h-16 w-16 rounded-2xl bg-orange-400/10 text-orange-400 flex items-center justify-center mb-6 border border-orange-400/20 group-hover:scale-110 transition-transform">
-              <Bug className="h-8 w-8" />
+            <div className="h-12 w-12 sm:h-14 sm:w-14 lg:h-16 lg:w-16 rounded-xl sm:rounded-2xl bg-orange-400/10 text-orange-400 flex items-center justify-center mb-4 sm:mb-6 border border-orange-400/20 group-hover:scale-110 transition-transform">
+              <Bug className="h-6 w-6 sm:h-7 sm:w-7 lg:h-8 lg:w-8" />
             </div>
-            <h2 className="text-2xl lg:text-3xl font-black text-white tracking-tight">Code Analysis</h2>
-            <p className="text-sm lg:text-base text-slate-300 mt-3 leading-relaxed font-normal">
+            <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-white tracking-tight">Code Analysis</h2>
+            <p className="text-xs sm:text-sm lg:text-base text-slate-300 mt-2 sm:mt-3 leading-relaxed font-normal">
               Mental execution drills! Convoluted nested loops, variable mutations, and tracing without a compiler.
             </p>
           </div>
-          <div className="pt-4 border-t border-white/5 flex items-center justify-between">
-            <span className="text-sm lg:text-base text-orange-400 font-bold group-hover:underline">Analyze Code →</span>
+          <div className="pt-3 sm:pt-4 border-t border-white/5 flex items-center justify-between">
+            <span className="text-xs sm:text-sm lg:text-base text-orange-400 font-bold group-hover:underline">Analyze Code →</span>
           </div>
         </div>
       </div>
 
-      <button onClick={() => setActiveModal('upload')} className="w-full p-5 rounded-2xl border border-white/10 bg-[#060c20]/80 hover:border-[#3ccb57]/50 flex items-center justify-between cursor-pointer">
-        <div className="flex items-center gap-4">
-          <div className="h-10 w-10 rounded-xl bg-white/5 text-[#3ccb57] flex items-center justify-center"><Upload className="h-5 w-5" /></div>
+      <button onClick={() => setActiveModal('upload')} className="w-full p-4 sm:p-5 rounded-2xl border border-white/10 bg-[#060c20]/80 hover:border-[#3ccb57]/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4 cursor-pointer text-left transition-all">
+        <div className="flex items-start sm:items-center gap-3.5 sm:gap-4">
+          <div className="h-10 w-10 shrink-0 rounded-xl bg-white/5 text-[#3ccb57] flex items-center justify-center mt-0.5 sm:mt-0"><Upload className="h-5 w-5" /></div>
           <div>
-            <h3 className="text-base font-bold text-white flex items-center gap-2">
+            <h3 className="text-sm sm:text-base font-bold text-white flex flex-wrap items-center gap-2">
               <span>Smart Ingestion & Tag Categorization</span>
               <span className="text-[10px] font-mono text-[#3ccb57] bg-[#3ccb57]/10 px-2 py-0.5 rounded-full">AI Moderated</span>
             </h3>
-            <p className="text-xs text-slate-400">Submit lecture slides or notes. AI audits quality, creates/links hashtags, and indexes into cloud.</p>
+            <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5">Submit lecture slides or notes. AI audits quality, creates/links hashtags, and indexes into cloud.</p>
           </div>
         </div>
-        <span className="text-xs font-semibold px-4 py-2 bg-[#3ccb57] text-black rounded-xl">Add Knowledge</span>
+        <span className="text-xs font-semibold px-4 py-2 bg-[#3ccb57] text-black rounded-xl shrink-0 self-start sm:self-auto text-center w-full sm:w-auto">Add Knowledge</span>
       </button>
 
       {/* MODALS */}
@@ -1168,6 +1280,9 @@ Output strictly as JSON without markdown:
         isOpen={activeModal === 'history'}
         onClose={() => setActiveModal('none')}
         historyList={historyList}
+        studyMaterials={studyMaterials}
+        studyMaterialsError={studyMaterialsError}
+        onStartWeakQuiz={handleStartWeakQuiz}
       />
 
       <SettingsModal

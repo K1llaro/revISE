@@ -203,13 +203,13 @@ export default function ISEasyApp() {
   };
 
   return (
-    <div className="relative h-screen w-screen overflow-hidden text-slate-100 selection:bg-[#3ccb57]/30 selection:text-white flex flex-col justify-between">
+    <div className="relative min-h-[100dvh] h-screen w-full overflow-hidden text-slate-100 selection:bg-[#3ccb57]/30 selection:text-white flex flex-col justify-between">
       <BackgroundGradients />
 
       <div className="relative z-10 flex flex-col h-full w-full justify-between overflow-hidden">
         <Navbar />
 
-        <main className="flex-1 min-h-0 w-full flex flex-col items-center justify-center px-4 sm:px-8 py-2 overflow-hidden">
+        <main className="flex-1 min-h-0 w-full flex flex-col items-center justify-start px-3 sm:px-6 lg:px-8 py-3 sm:py-6 overflow-y-auto overflow-x-hidden">
           {currentUser ? (
             <AuthenticatedWorkspace
               user={currentUser}
@@ -231,8 +231,8 @@ export default function ISEasyApp() {
       </div>
 
       {showOnboarding && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-fade-in text-left">
-          <div className="w-full max-w-lg rounded-2xl border border-white/15 bg-[#060c20]/95 backdrop-blur-2xl p-7 space-y-5 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/40 backdrop-blur-sm animate-fade-in text-left">
+          <div className="w-full max-w-lg rounded-2xl border border-white/15 bg-[#060c20]/95 backdrop-blur-2xl p-5 sm:p-7 space-y-4 sm:space-y-5 shadow-2xl max-h-[92vh] overflow-y-auto">
             <div className="flex justify-between items-start border-b border-white/10 pb-4">
               <div>
                 <span className="text-[10px] font-mono font-bold text-[#3ccb57] uppercase tracking-wider block mb-1">

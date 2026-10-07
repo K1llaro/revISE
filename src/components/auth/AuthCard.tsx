@@ -36,10 +36,10 @@ export const AuthCard: React.FC<{
   };
 
   return (
-    <div className="w-full max-w-[440px] mx-auto p-8 rounded-2xl border border-white/10 bg-[#060c20]/90 backdrop-blur-2xl shadow-2xl text-center animate-fade-in space-y-6">
+    <div className="w-full max-w-[440px] mx-auto my-auto p-5 sm:p-8 rounded-2xl border border-white/10 bg-[#060c20]/90 backdrop-blur-2xl shadow-2xl text-center animate-fade-in space-y-4 sm:space-y-6">
       {/* Логотип */}
       <div>
-        <h1 className="text-4xl font-black text-white tracking-tight select-none">
+        <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight select-none">
           rev<span className="text-[#3ccb57] drop-shadow-[0_0_20px_rgba(60,203,87,0.4)]">ISE</span>
         </h1>
         <p className="text-xs text-slate-400 mt-1.5 font-mono">

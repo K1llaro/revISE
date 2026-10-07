@@ -12,7 +12,7 @@ export const ApiKeyTooltip: React.FC = () => {
         <span className="underline">Get Free Key</span>
       </button>
       {isVisible && (
-        <div className="absolute left-0 sm:left-1/2 bottom-full mb-3 z-50 w-72 -translate-x-1/2 rounded-xl border border-white/15 bg-[#060c20]/95 p-3 text-left shadow-2xl backdrop-blur-xl text-[11px] text-slate-300 space-y-1">
+        <div className="absolute right-0 sm:left-1/2 bottom-full mb-3 z-50 w-64 sm:w-72 sm:-translate-x-1/2 rounded-xl border border-white/15 bg-[#060c20]/95 p-3 text-left shadow-2xl backdrop-blur-xl text-[11px] text-slate-300 space-y-1">
           <p className="font-bold text-white">Google AI Studio (Free Tier)</p>
           <p>1. Open <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-[#3ccb57] underline">aistudio.google.com</a>.</p>
           <p>2. Click "Create API key" and paste it into Settings.</p>
@@ -50,13 +50,13 @@ export const FileDropzone: React.FC<{
           if (e.dataTransfer.files) await handleFiles(e.dataTransfer.files);
         }}
         onClick={() => inputRef.current?.click()}
-        className={`border-2 border-dashed rounded-xl p-3.5 text-center cursor-pointer transition-all ${
+        className={`border-2 border-dashed rounded-xl p-3 sm:p-3.5 text-center cursor-pointer transition-all ${
           isDragging ? 'border-[#3ccb57] bg-[#3ccb57]/10' : 'border-white/15 bg-black/40 hover:border-[#3ccb57]/50 hover:bg-black/60'
         }`}
       >
         <input ref={inputRef} type="file" multiple onChange={(e) => handleFiles(e.target.files)} className="hidden" />
         <div className="flex items-center justify-center gap-2 text-xs font-medium text-slate-300">
-          <FileUp className="h-4 w-4 text-[#3ccb57]" />
+          <FileUp className="h-4 w-4 text-[#3ccb57] shrink-0" />
           <span>Drag & Drop files here, or <strong className="text-white underline">browse desktop</strong></span>
         </div>
         <p className="text-[10px] text-slate-500 mt-0.5">Supports PDF (native multimodal), Java, TS, Py, Markdown, TXT</p>
@@ -65,10 +65,10 @@ export const FileDropzone: React.FC<{
       {files.length > 0 && (
         <div className="flex flex-wrap gap-1.5 pt-1">
           {files.map((f, i) => (
-            <span key={i} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 text-[11px] font-mono text-slate-200">
-              <Paperclip className="h-3 w-3 text-[#3ccb57]" />
-              <span className="max-w-[140px] truncate">{f.name}</span>
-              <button type="button" onClick={(e) => { e.stopPropagation(); onFileRemoved(i); }} className="text-red-400 hover:text-red-300 ml-1 cursor-pointer">
+            <span key={i} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 text-[11px] font-mono text-slate-200 max-w-full">
+              <Paperclip className="h-3 w-3 text-[#3ccb57] shrink-0" />
+              <span className="max-w-[140px] sm:max-w-[200px] truncate">{f.name}</span>
+              <button type="button" onClick={(e) => { e.stopPropagation(); onFileRemoved(i); }} className="text-red-400 hover:text-red-300 ml-1 cursor-pointer shrink-0">
                 ✕
               </button>
             </span>
@@ -80,25 +80,28 @@ export const FileDropzone: React.FC<{
 };
 
 export const Navbar: React.FC = () => (
-  <header className="w-full border-b border-white/[0.07] bg-[#040816]/70 backdrop-blur-md">
-    <div className="flex h-16 w-full items-center justify-between px-6 sm:px-10">
-        <a href="/" className="text-xl font-bold tracking-tight text-white inline-flex items-center gap-2.5 group">
+  <header className="w-full border-b border-white/[0.07] bg-[#040816]/70 backdrop-blur-md shrink-0">
+    <div className="flex h-14 sm:h-16 w-full items-center justify-between px-4 sm:px-8">
+        <a href="/" className="text-lg sm:text-xl font-bold tracking-tight text-white inline-flex items-center gap-2 group">
             <img src="/favicon.svg" alt="revISE Logo" className="h-5 w-5 shrink-0 object-contain" />
             <span className="leading-none flex items-center">
                  rev<span className="text-[#3ccb57]">ISE</span>
             </span>
         </a>
-      <a href="https://aistudio.google.com" target="_blank" rel="noopener noreferrer" className="text-xs font-semibold text-slate-300 hover:text-[#3ccb57] flex items-center gap-1.5">
-        Google AI Studio <ExternalLink className="h-3.5 w-3.5" />
+      <a href="https://aistudio.google.com" target="_blank" rel="noopener noreferrer" className="text-xs font-semibold text-slate-300 hover:text-[#3ccb57] flex items-center gap-1.5 transition-colors">
+        <span className="hidden sm:inline">Google </span>AI Studio <ExternalLink className="h-3.5 w-3.5" />
       </a>
     </div>
   </header>
 );
 
 export const Footer: React.FC = () => (
-  <footer className="w-full border-t border-white/[0.06] bg-[#02050f]/80 py-2.5 sm:py-3 text-xs text-slate-500">
-    <div className="w-full px-6 sm:px-10 flex flex-col sm:flex-row justify-between items-center gap-3">
-      <a href="https://aistudio.google.com" target="_blank" rel="noopener noreferrer" className="hover:text-[#3ccb57]">Google AI Studio</a>
+  <footer className="w-full border-t border-white/[0.06] bg-[#02050f]/80 py-2 sm:py-2.5 text-[11px] sm:text-xs text-slate-500 shrink-0">
+    <div className="w-full px-4 sm:px-8 flex justify-between items-center gap-3">
+      <span className="truncate">rev<span className="text-[#3ccb57]">ISE</span> · LM173</span>
+      <a href="https://aistudio.google.com" target="_blank" rel="noopener noreferrer" className="hover:text-[#3ccb57] transition-colors shrink-0">
+        Google AI Studio
+      </a>
     </div>
   </footer>
 );
