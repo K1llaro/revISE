@@ -209,7 +209,7 @@ export default function ISEasyApp() {
       <div className="relative z-10 flex flex-col h-full w-full justify-between overflow-hidden">
         <Navbar />
 
-        <main className="flex-1 min-h-0 w-full flex flex-col items-center justify-start px-3 sm:px-6 lg:px-8 py-3 sm:py-6 overflow-y-auto overflow-x-hidden">
+        <main className={`flex-1 min-h-0 w-full flex flex-col justify-start overflow-x-hidden ${currentUser ? 'items-stretch overflow-hidden p-0' : 'items-center px-3 sm:px-6 lg:px-8 py-3 sm:py-6 overflow-y-auto'}`}>
           {currentUser ? (
             <AuthenticatedWorkspace
               user={currentUser}
@@ -227,7 +227,7 @@ export default function ISEasyApp() {
           )}
         </main>
 
-        <Footer />
+        {!currentUser && <Footer />}
       </div>
 
       {showOnboarding && (

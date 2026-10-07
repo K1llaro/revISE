@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Brain, Code2, Bug, Upload, Settings, History, Shield, Trophy } from 'lucide-react';
+import { Brain, Code2, Bug, Upload, Settings, History, Shield, Trophy, BookOpen, Home } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import type { UserSession, StudyYear, ActiveModal, AppView, TestHistoryItem, FlaggedMaterial, AttachedFile, QuizQuestion, ProgrammingChallenge, CodeAnalysisDrill, QuestionReviewDetail, LeaderboardEntry, StudyMaterial } from '../../types/ise';
 import { DEFAULT_YEAR_PROMPTS } from '../../lib/constants';
 import { callGemini } from '../../lib/gemini';
+import { LearnWorkspace } from './LearnWorkspace';
 import { ActiveQuizView, QuizResultsView, ActiveProgView, ProgResultsView, ActiveAnalysisView, AnalysisResultsView } from './ActiveViews';
 import { QuizModal, ProgrammingModal, AnalysisModal, UploadModal, AdminModal, HistoryModal, SettingsModal, LeaderboardModal } from './WorkspaceModals';
 
@@ -14,25 +15,10 @@ export const AuthenticatedWorkspace: React.FC<{
 }> = ({ user, onSignOut, onApiKeyUpdated }) => {
   const [currentView, setCurrentView] = useState<AppView>('station');
   const [activeModal, setActiveModal] = useState<ActiveModal>('none');
+  const [workspaceMode, setWorkspaceMode] = useState<'home' | 'practice' | 'learn'>('home');
 
   const [currentYear, setCurrentYear] = useState<StudyYear>(user.studyYear || 'year1');
   const [yearPrompts, setYearPrompts] = useState<Record<StudyYear, string>>(DEFAULT_YEAR_PROMPTS);
-
-  // Dynamic Subtitle Roll
-  const DYNAMIC_SUBTITLES = [
-    'Mission Control', 'Compiler Chamber', 'Mental Execution Rig', 'Bug Hunting Ground',
-    'Studio LM173 Terminal', 'Residency Prep', 'Zero-Day Sandbox', 'Syntax Foundry',
-    'Runtime Intelligence', 'Off-by-One Detector', 'Git Rebase Zone', 'Learning Station',
-  ];
-  const [subtitle, setSubtitle] = useState('Learning Station');
-
-  useEffect(() => {
-    setSubtitle(DYNAMIC_SUBTITLES[Math.floor(Math.random() * DYNAMIC_SUBTITLES.length)]);
-  }, []);
-
-  const handleShuffleSubtitle = () => {
-    setSubtitle(DYNAMIC_SUBTITLES[Math.floor(Math.random() * DYNAMIC_SUBTITLES.length)]);
-  };
 
   // Custom Titles
   const [quizCustomTitle, setQuizCustomTitle] = useState('');
@@ -929,6 +915,7 @@ Output strictly as JSON without markdown:
   const handleStartWeakQuiz = (topics: Array<{ topic: string; tagName: string }>) => {
     const topicList = topics.map((item) => item.topic);
     const primaryTag = topics[0]?.tagName;
+    setWorkspaceMode('practice');
     setSelectedTag(primaryTag || '');
     setQuizCustomTitle('Weak Areas Review');
     setQuizQuestionCount(10);
@@ -954,231 +941,130 @@ Output strictly as JSON without markdown:
     fetchLeaderboardData();
   };
 
-  /* RENDER ACTIVE RUNNERS */
-  if (currentView === 'active_prog' && activeProg) {
-    return (
-      <ActiveProgView
-        activeProg={activeProg}
-        progDifficulty={progDifficulty}
-        studentCodeInput={studentCodeInput}
-        setStudentCodeInput={setStudentCodeInput}
-        isGenerating={isGenerating}
-        onExit={() => setCurrentView('station')}
-        onSubmit={handleSubmitProgramming}
-      />
-    );
-  }
-
-  if (currentView === 'prog_results' && progResults) {
-    return <ProgResultsView activeProg={activeProg} progResults={progResults} onBack={() => setCurrentView('station')} />;
-  }
-
-  if (currentView === 'active_analysis' && activeAnalysis) {
-    return (
-      <ActiveAnalysisView
-        activeAnalysis={activeAnalysis}
-        analysisDifficulty={analysisDifficulty}
-        predictedOutputInput={predictedOutputInput}
-        setPredictedOutputInput={setPredictedOutputInput}
-        scratchpadNotes={scratchpadNotes}
-        setScratchpadNotes={setScratchpadNotes}
-        isGenerating={isGenerating}
-        onAbandon={() => setCurrentView('station')}
-        onSubmit={handleSubmitAnalysis}
-      />
-    );
-  }
-
-  if (currentView === 'analysis_results' && analysisResults) {
-    return <AnalysisResultsView activeAnalysis={activeAnalysis} analysisResults={analysisResults} predictedOutputInput={predictedOutputInput} onBack={() => setCurrentView('station')} />;
-  }
-
-  if (currentView === 'active_quiz' && activeQuiz) {
-    return (
-      <ActiveQuizView
-        activeQuiz={activeQuiz}
-        quizTimeLeft={quizTimeLeft}
-        userAnswers={userAnswers}
-        setUserAnswers={setUserAnswers}
-        onAnswerStarted={(questionId) => {
-          const question = activeQuiz.questions.find((item) => item.id === questionId);
-          if (!question || question.type === 'text' || questionResponseTimesRef.current[questionId] !== undefined) return;
-          if (quizStartedAtRef.current) {
-            questionResponseTimesRef.current[questionId] = Math.max(
-              1,
-              Math.round((Date.now() - quizStartedAtRef.current) / 1000)
-            );
-          }
-        }}
-        selectedTag={selectedTag}
-        quizScoringMode={quizScoringMode}
-        onAbandon={() => setCurrentView('station')}
-        onSubmit={handleFinishQuiz}
-      />
-    );
-  }
-
-  if (currentView === 'quiz_results' && quizResults) {
-    return <QuizResultsView activeQuiz={activeQuiz} quizResults={quizResults} onBack={() => setCurrentView('station')} />;
-  }
-
-  /* RENDER DASHBOARD */
-  return (
-    <div className="w-full max-w-6xl mx-auto space-y-5 sm:space-y-8 animate-fade-in text-left">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 border-b border-white/10 pb-4 sm:pb-5">
-        <div className="w-full sm:w-auto">
-          <div className="flex flex-wrap items-center gap-2">
-            <img src="/favicon.svg" alt="revISE Logo" className="h-5 w-5 sm:h-6 sm:w-6 shrink-0 object-contain" />
-            <h1 className="text-xl sm:text-2xl font-black text-white leading-none flex flex-wrap items-center">
-              <span>rev</span><span className="text-[#3ccb57]">ISE</span>
-              <span className="text-slate-500 font-normal mx-1.5 sm:mx-2 text-base sm:text-lg">·</span>
-              <span
-                onClick={handleShuffleSubtitle}
-                title="Click to roll another tagline!"
-                className="text-slate-200 font-semibold cursor-pointer hover:text-[#3ccb57] transition-colors select-none text-sm sm:text-base"
-              >
-                {subtitle}
-              </span>
-            </h1>
-            <span className="inline-flex items-center justify-center px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full bg-[#3ccb57]/10 text-[9px] sm:text-[10px] font-mono text-[#3ccb57] uppercase font-bold border border-[#3ccb57]/30 leading-none">
-              {currentYear.toUpperCase()}
-            </span>
-          </div>
-          <p className="text-[11px] sm:text-xs text-slate-400 mt-1">
-            Student: <strong className="text-white truncate inline-block max-w-[180px] sm:max-w-none align-bottom">{user.nickname || user.email}</strong> ·{' '}
-            {user.apiKey ? <span className="text-[#3ccb57]">AI Studio Active</span> : <span className="text-amber-400">No Key in Settings</span>}
-          </p>
-        </div>
-
-        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap w-full sm:w-auto justify-start sm:justify-end">
-          {isAdmin && (
-            <button
-              onClick={() => {
-                loadData();
-                setActiveModal('admin');
-              }}
-              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 text-[11px] sm:text-xs font-bold text-amber-300 bg-amber-950/30 hover:bg-amber-950/50 border border-amber-500/40 rounded-xl cursor-pointer"
-            >
-              <Shield className="h-3.5 w-3.5" />
-              <span>Admin ({flaggedItems.length})</span>
-            </button>
-          )}
-
-          {/* 🏆 КНОПКА ЛИДЕРБОРДА */}
-          <button
-            onClick={() => {
-              fetchLeaderboardData();
-              setActiveModal('leaderboard');
-            }}
-            className="px-2.5 sm:px-3.5 py-1.5 sm:py-2 text-[11px] sm:text-xs font-semibold bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl flex items-center gap-1.5 cursor-pointer shadow-sm hover:border-[#3ccb57]/40 text-slate-200 hover:text-white"
-          >
-            <Trophy className="h-3.5 w-3.5 text-[#3ccb57]" />
-            <span>Leaderboard</span>
-          </button>
-
-          <button
-            onClick={() => {
-              loadData();
-              fetchStudyMaterials().catch(() => undefined);
-              setActiveModal('history');
-            }}
-            className="px-2.5 sm:px-3.5 py-1.5 sm:py-2 text-[11px] sm:text-xs font-semibold bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl flex items-center gap-1.5 cursor-pointer shadow-sm"
-          >
-            <History className="h-3.5 w-3.5 text-[#3ccb57]" />
-            <span>History &amp; Statistics</span>
-          </button>
-
-          <button
-            onClick={() => setActiveModal('settings')}
-            className="px-2.5 sm:px-3.5 py-1.5 sm:py-2 text-[11px] sm:text-xs font-semibold bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl flex items-center gap-1.5 cursor-pointer shadow-sm"
-          >
-            <Settings className="h-3.5 w-3.5" />
-            <span>Settings</span>
-          </button>
-
-          <button onClick={onSignOut} className="px-2.5 sm:px-3.5 py-1.5 sm:py-2 text-[11px] sm:text-xs font-semibold text-red-400 bg-red-950/20 border border-red-500/20 rounded-xl cursor-pointer">
-            Sign Out
-          </button>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
-        {/* CARD 1: Quiz Test */}
-        <div onClick={() => setActiveModal('quiz')} className="group relative rounded-2xl sm:rounded-3xl border border-white/10 bg-[#060c20]/85 hover:border-sky-400/50 p-5 sm:p-7 lg:p-9 flex flex-col justify-between min-h-[220px] sm:min-h-[280px] lg:min-h-[340px] cursor-pointer backdrop-blur-xl transition-all duration-300 shadow-2xl hover:shadow-[0_0_40px_rgba(56,189,248,0.2)] hover:-translate-y-1.5">
-          <div className="absolute top-5 right-5 sm:top-6 sm:right-6 flex items-center">
-            <span className="h-3 w-3 sm:h-3.5 sm:w-3.5 rounded-full bg-sky-400 shadow-[0_0_15px_#38bdf8]" />
-          </div>
-
-          <div>
-            <div className="h-12 w-12 sm:h-14 sm:w-14 lg:h-16 lg:w-16 rounded-xl sm:rounded-2xl bg-sky-400/10 text-sky-400 flex items-center justify-center mb-4 sm:mb-6 border border-sky-400/20 group-hover:scale-110 transition-transform">
-              <Brain className="h-6 w-6 sm:h-7 sm:w-7 lg:h-8 lg:w-8" />
-            </div>
-            <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-white tracking-tight">Quiz Test</h2>
-            <p className="text-xs sm:text-sm lg:text-base text-slate-300 mt-2 sm:mt-3 leading-relaxed font-normal">
-              Dynamic timed tests with single/multiple choice options, deep reasoning, and strict or partial credit.
-            </p>
-          </div>
-          <div className="pt-3 sm:pt-4 border-t border-white/5 flex items-center justify-between">
-            <span className="text-xs sm:text-sm lg:text-base text-sky-400 font-bold group-hover:underline">Launch Quiz →</span>
-          </div>
-        </div>
-
-        {/* CARD 2: Programming Exercises */}
-        <div onClick={() => setActiveModal('programming')} className="group relative rounded-2xl sm:rounded-3xl border border-white/10 bg-[#060c20]/85 hover:border-[#3ccb57]/50 p-5 sm:p-7 lg:p-9 flex flex-col justify-between min-h-[220px] sm:min-h-[280px] lg:min-h-[340px] cursor-pointer backdrop-blur-xl transition-all duration-300 shadow-2xl hover:shadow-[0_0_40px_rgba(60,203,87,0.2)] hover:-translate-y-1.5">
-          <div className="absolute top-5 right-5 sm:top-6 sm:right-6 flex items-center">
-            <span className="h-3 w-3 sm:h-3.5 sm:w-3.5 rounded-full bg-[#3ccb57] shadow-[0_0_15px_#3ccb57]" />
-          </div>
-
-          <div>
-            <div className="h-12 w-12 sm:h-14 sm:w-14 lg:h-16 lg:w-16 rounded-xl sm:rounded-2xl bg-[#3ccb57]/10 text-[#3ccb57] flex items-center justify-center mb-4 sm:mb-6 border border-[#3ccb57]/20 group-hover:scale-110 transition-transform">
-              <Code2 className="h-6 w-6 sm:h-7 sm:w-7 lg:h-8 lg:w-8" />
-            </div>
-            <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-white tracking-tight">Programming Exercises</h2>
-            <p className="text-xs sm:text-sm lg:text-base text-slate-300 mt-2 sm:mt-3 leading-relaxed font-normal">
-              Structured Java lab exercises with objectives, requirements, pattern rules, and example outputs.
-            </p>
-          </div>
-          <div className="pt-3 sm:pt-4 border-t border-white/5 flex items-center justify-between">
-            <span className="text-xs sm:text-sm lg:text-base text-[#3ccb57] font-bold group-hover:underline">Write Code →</span>
-          </div>
-        </div>
-
-        {/* CARD 3: Code Analysis */}
-        <div onClick={() => setActiveModal('analysis')} className="group relative rounded-2xl sm:rounded-3xl border border-white/10 bg-[#060c20]/85 hover:border-orange-400/50 p-5 sm:p-7 lg:p-9 flex flex-col justify-between min-h-[220px] sm:min-h-[280px] lg:min-h-[340px] cursor-pointer backdrop-blur-xl transition-all duration-300 shadow-2xl hover:shadow-[0_0_40px_rgba(251,146,60,0.2)] hover:-translate-y-1.5">
-          <div className="absolute top-5 right-5 sm:top-6 sm:right-6 flex items-center">
-            <span className="h-3 w-3 sm:h-3.5 sm:w-3.5 rounded-full bg-orange-400 shadow-[0_0_15px_#fb923c]" />
-          </div>
-
-          <div>
-            <div className="h-12 w-12 sm:h-14 sm:w-14 lg:h-16 lg:w-16 rounded-xl sm:rounded-2xl bg-orange-400/10 text-orange-400 flex items-center justify-center mb-4 sm:mb-6 border border-orange-400/20 group-hover:scale-110 transition-transform">
-              <Bug className="h-6 w-6 sm:h-7 sm:w-7 lg:h-8 lg:w-8" />
-            </div>
-            <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-white tracking-tight">Code Analysis</h2>
-            <p className="text-xs sm:text-sm lg:text-base text-slate-300 mt-2 sm:mt-3 leading-relaxed font-normal">
-              Mental execution drills! Convoluted nested loops, variable mutations, and tracing without a compiler.
-            </p>
-          </div>
-          <div className="pt-3 sm:pt-4 border-t border-white/5 flex items-center justify-between">
-            <span className="text-xs sm:text-sm lg:text-base text-orange-400 font-bold group-hover:underline">Analyze Code →</span>
-          </div>
-        </div>
-      </div>
-
-      <button onClick={() => setActiveModal('upload')} className="w-full p-4 sm:p-5 rounded-2xl border border-white/10 bg-[#060c20]/80 hover:border-[#3ccb57]/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4 cursor-pointer text-left transition-all">
-        <div className="flex items-start sm:items-center gap-3.5 sm:gap-4">
-          <div className="h-10 w-10 shrink-0 rounded-xl bg-white/5 text-[#3ccb57] flex items-center justify-center mt-0.5 sm:mt-0"><Upload className="h-5 w-5" /></div>
-          <div>
-            <h3 className="text-sm sm:text-base font-bold text-white flex flex-wrap items-center gap-2">
-              <span>Smart Ingestion & Tag Categorization</span>
-              <span className="text-[10px] font-mono text-[#3ccb57] bg-[#3ccb57]/10 px-2 py-0.5 rounded-full">AI Moderated</span>
-            </h3>
-            <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5">Submit lecture slides or notes. AI audits quality, creates/links hashtags, and indexes into cloud.</p>
-          </div>
-        </div>
-        <span className="text-xs font-semibold px-4 py-2 bg-[#3ccb57] text-black rounded-xl shrink-0 self-start sm:self-auto text-center w-full sm:w-auto">Add Knowledge</span>
+  const pageContent = currentView === 'active_prog' && activeProg ? (
+    <ActiveProgView
+      activeProg={activeProg}
+      progDifficulty={progDifficulty}
+      studentCodeInput={studentCodeInput}
+      setStudentCodeInput={setStudentCodeInput}
+      isGenerating={isGenerating}
+      onExit={() => setCurrentView('station')}
+      onSubmit={handleSubmitProgramming}
+    />
+  ) : currentView === 'prog_results' && progResults ? (
+    <ProgResultsView activeProg={activeProg} progResults={progResults} onBack={() => setCurrentView('station')} />
+  ) : currentView === 'active_analysis' && activeAnalysis ? (
+    <ActiveAnalysisView
+      activeAnalysis={activeAnalysis}
+      analysisDifficulty={analysisDifficulty}
+      predictedOutputInput={predictedOutputInput}
+      setPredictedOutputInput={setPredictedOutputInput}
+      scratchpadNotes={scratchpadNotes}
+      setScratchpadNotes={setScratchpadNotes}
+      isGenerating={isGenerating}
+      onAbandon={() => setCurrentView('station')}
+      onSubmit={handleSubmitAnalysis}
+    />
+  ) : currentView === 'analysis_results' && analysisResults ? (
+    <AnalysisResultsView activeAnalysis={activeAnalysis} analysisResults={analysisResults} predictedOutputInput={predictedOutputInput} onBack={() => setCurrentView('station')} />
+  ) : currentView === 'active_quiz' && activeQuiz ? (
+    <ActiveQuizView
+      activeQuiz={activeQuiz}
+      quizTimeLeft={quizTimeLeft}
+      userAnswers={userAnswers}
+      setUserAnswers={setUserAnswers}
+      onAnswerStarted={(questionId) => {
+        const question = activeQuiz.questions.find((item) => item.id === questionId);
+        if (!question || question.type === 'text' || questionResponseTimesRef.current[questionId] !== undefined) return;
+        if (quizStartedAtRef.current) {
+          questionResponseTimesRef.current[questionId] = Math.max(
+            1,
+            Math.round((Date.now() - quizStartedAtRef.current) / 1000)
+          );
+        }
+      }}
+      selectedTag={selectedTag}
+      quizScoringMode={quizScoringMode}
+      onAbandon={() => setCurrentView('station')}
+      onSubmit={handleFinishQuiz}
+    />
+  ) : currentView === 'quiz_results' && quizResults ? (
+    <QuizResultsView activeQuiz={activeQuiz} quizResults={quizResults} onBack={() => setCurrentView('station')} />
+  ) : workspaceMode === 'learn' ? (
+    <LearnWorkspace user={user} currentYear={currentYear} />
+  ) : workspaceMode === 'practice' ? (
+    <div className="w-full max-w-6xl mx-auto p-4 sm:p-8 space-y-5 sm:space-y-8 animate-fade-in text-left overflow-y-auto">
+      <button type="button" onClick={() => setWorkspaceMode('home')} className="inline-flex items-center gap-2 text-xs text-slate-400 hover:text-white cursor-pointer">
+        <Home className="h-4 w-4" /> Back to menu
       </button>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
+        <button type="button" onClick={() => setActiveModal('quiz')} className="group rounded-2xl sm:rounded-3xl border border-white/10 bg-[#060c20]/85 hover:border-sky-400/50 p-5 sm:p-7 lg:p-9 flex flex-col justify-between min-h-[240px] sm:min-h-[300px] text-left transition-all shadow-2xl hover:-translate-y-1">
+          <div><span className="flex h-12 w-12 items-center justify-center rounded-xl bg-sky-400/10 text-sky-400 border border-sky-400/20 mb-5"><Brain className="h-6 w-6" /></span><h2 className="text-xl sm:text-2xl font-black text-white">Quiz Test</h2><p className="mt-3 text-sm text-slate-300 leading-relaxed">Dynamic timed tests with single/multiple choice options, deep reasoning, and strict or partial credit.</p></div>
+          <span className="mt-5 border-t border-white/5 pt-4 text-sm text-sky-400 font-bold">Launch Quiz →</span>
+        </button>
+        <button type="button" onClick={() => setActiveModal('programming')} className="group rounded-2xl sm:rounded-3xl border border-white/10 bg-[#060c20]/85 hover:border-[#3ccb57]/50 p-5 sm:p-7 lg:p-9 flex flex-col justify-between min-h-[240px] sm:min-h-[300px] text-left transition-all shadow-2xl hover:-translate-y-1">
+          <div><span className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#3ccb57]/10 text-[#3ccb57] border border-[#3ccb57]/20 mb-5"><Code2 className="h-6 w-6" /></span><h2 className="text-xl sm:text-2xl font-black text-white">Programming Exercises</h2><p className="mt-3 text-sm text-slate-300 leading-relaxed">Structured Java lab exercises with objectives, requirements, pattern rules, and example outputs.</p></div>
+          <span className="mt-5 border-t border-white/5 pt-4 text-sm text-[#3ccb57] font-bold">Write Code →</span>
+        </button>
+        <button type="button" onClick={() => setActiveModal('analysis')} className="group rounded-2xl sm:rounded-3xl border border-white/10 bg-[#060c20]/85 hover:border-orange-400/50 p-5 sm:p-7 lg:p-9 flex flex-col justify-between min-h-[240px] sm:min-h-[300px] text-left transition-all shadow-2xl hover:-translate-y-1">
+          <div><span className="flex h-12 w-12 items-center justify-center rounded-xl bg-orange-400/10 text-orange-400 border border-orange-400/20 mb-5"><Bug className="h-6 w-6" /></span><h2 className="text-xl sm:text-2xl font-black text-white">Code Analysis</h2><p className="mt-3 text-sm text-slate-300 leading-relaxed">Mental execution drills: nested loops, variable mutations, and tracing without a compiler.</p></div>
+          <span className="mt-5 border-t border-white/5 pt-4 text-sm text-orange-400 font-bold">Analyze Code →</span>
+        </button>
+      </div>
+      <button type="button" onClick={() => setActiveModal('upload')} className="w-full p-4 sm:p-5 rounded-2xl border border-white/10 bg-[#060c20]/80 hover:border-[#3ccb57]/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4 cursor-pointer text-left transition-all">
+        <div className="flex items-start sm:items-center gap-3.5 sm:gap-4"><div className="h-10 w-10 shrink-0 rounded-xl bg-white/5 text-[#3ccb57] flex items-center justify-center"><Upload className="h-5 w-5" /></div><div><h3 className="text-sm font-bold text-white flex flex-wrap items-center gap-2"><span>Shared curriculum library</span><span className="text-[10px] font-mono text-[#3ccb57] bg-[#3ccb57]/10 px-2 py-0.5 rounded-full">AI Moderated</span></h3><p className="text-[11px] text-slate-400 mt-1">Contribute approved course material to the shared quiz library.</p></div></div>
+        <span className="text-xs font-semibold px-4 py-2 bg-[#3ccb57] text-black rounded-xl shrink-0 text-center">Add shared material</span>
+      </button>
+    </div>
+  ) : (
+    <div className="w-full max-w-5xl mx-auto p-4 sm:p-8 flex-1 flex flex-col justify-center animate-fade-in text-left">
+      <div className="mb-8 text-center">
+        <img src="/favicon.svg" alt="revISE logo" className="h-12 w-12 mx-auto mb-4" />
+        <h1 className="text-3xl sm:text-4xl font-black text-white">rev<span className="text-[#3ccb57]">ISE</span></h1>
+        <p className="mt-2 text-sm text-slate-400">Welcome, {user.nickname || user.email}</p>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-7">
+        <button type="button" onClick={() => { setWorkspaceMode('practice'); setCurrentView('station'); }} className="group min-h-[220px] sm:min-h-[300px] rounded-3xl border border-white/10 bg-[#060c20]/85 p-7 sm:p-10 text-left shadow-2xl transition-all hover:-translate-y-1 hover:border-[#3ccb57]/50 hover:shadow-[0_0_40px_rgba(60,203,87,0.16)]">
+          <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#3ccb57]/10 text-[#3ccb57] border border-[#3ccb57]/20 group-hover:scale-105 transition-transform"><Brain className="h-7 w-7" /></span>
+          <h2 className="mt-6 text-2xl sm:text-3xl font-black text-white">Practice</h2>
+          <p className="mt-3 text-sm text-slate-300 leading-relaxed">Quiz yourself, solve programming exercises, and sharpen your code analysis skills.</p>
+          <span className="mt-7 inline-block text-sm font-bold text-[#3ccb57]">Open practice →</span>
+        </button>
+        <button type="button" onClick={() => { setWorkspaceMode('learn'); setCurrentView('station'); }} className="group min-h-[220px] sm:min-h-[300px] rounded-3xl border border-white/10 bg-[#111111] p-7 sm:p-10 text-left shadow-2xl transition-all hover:-translate-y-1 hover:border-white/25">
+          <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/[0.06] text-slate-200 border border-white/10 group-hover:scale-105 transition-transform"><BookOpen className="h-7 w-7" /></span>
+          <h2 className="mt-6 text-2xl sm:text-3xl font-black text-white">Learn</h2>
+          <p className="mt-3 text-sm text-slate-400 leading-relaxed">Build a personal journal of subjects, weekly sections, notes, and lecture summaries.</p>
+          <span className="mt-7 inline-block text-sm font-bold text-slate-200">Open notebook →</span>
+        </button>
+      </div>
+    </div>
+  );
 
-      {/* MODALS */}
+  return (
+    <div className={`w-full h-full min-h-0 flex flex-col text-left ${workspaceMode === 'learn' && currentView === 'station' ? 'bg-[#111111]' : ''}`}>
+      <header className="relative z-40 shrink-0 border-b border-white/10 bg-[#080b14]/95 backdrop-blur-xl px-3 sm:px-5 py-2.5">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5">
+          <div className="flex items-center justify-between gap-3">
+            <button type="button" onClick={() => { setCurrentView('station'); setWorkspaceMode('home'); }} className="flex min-w-0 items-center gap-2.5 text-left cursor-pointer">
+              <img src="/favicon.svg" alt="revISE logo" className="h-7 w-7 shrink-0 object-contain" />
+              <span className="min-w-0"><span className="block text-sm font-black text-white">rev<span className="text-[#3ccb57]">ISE</span></span><span className="block truncate text-[10px] text-slate-500">{user.nickname || user.email} · {user.apiKey ? 'AI Studio active' : 'No AI key'}</span></span>
+            </button>
+            <span className="hidden sm:inline-flex rounded-full border border-[#3ccb57]/30 bg-[#3ccb57]/10 px-2 py-1 text-[9px] font-mono font-bold uppercase text-[#3ccb57]">{currentYear}</span>
+          </div>
+          <div className="flex items-center gap-1.5 flex-wrap lg:justify-end">
+            {isAdmin && <button type="button" onClick={() => { loadData(); setActiveModal('admin'); }} className="inline-flex items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-950/20 px-2.5 py-1.5 text-[11px] font-bold text-amber-300 hover:bg-amber-950/40 cursor-pointer"><Shield className="h-3.5 w-3.5" /><span>Admin ({flaggedItems.length})</span></button>}
+            <button type="button" onClick={() => { fetchLeaderboardData(); setActiveModal('leaderboard'); }} className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1.5 text-[11px] text-slate-200 hover:bg-white/10 cursor-pointer"><Trophy className="h-3.5 w-3.5 text-[#3ccb57]" /><span>Leaderboard</span></button>
+            <button type="button" onClick={() => { loadData(); fetchStudyMaterials().catch(() => undefined); setActiveModal('history'); }} className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1.5 text-[11px] text-slate-200 hover:bg-white/10 cursor-pointer"><History className="h-3.5 w-3.5 text-[#3ccb57]" /><span>History &amp; Statistics</span></button>
+            <button type="button" onClick={() => setActiveModal('settings')} className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1.5 text-[11px] text-slate-200 hover:bg-white/10 cursor-pointer"><Settings className="h-3.5 w-3.5" /><span>Settings</span></button>
+            <button type="button" onClick={onSignOut} className="rounded-lg border border-red-500/20 bg-red-950/20 px-2.5 py-1.5 text-[11px] font-semibold text-red-300 hover:bg-red-950/40 cursor-pointer">Sign Out</button>
+          </div>
+        </div>
+      </header>
+
+      <main className="flex-1 min-h-0 w-full overflow-hidden flex flex-col">
+        {pageContent}
+      </main>
+
       <LeaderboardModal
         isOpen={activeModal === 'leaderboard'}
         onClose={() => setActiveModal('none')}
@@ -1187,107 +1073,56 @@ Output strictly as JSON without markdown:
         onConsentAccepted={handleConsentAccepted}
         isLoading={isLoadingLeaderboard}
       />
-
       <QuizModal
-        isOpen={activeModal === 'quiz'}
-        onClose={() => setActiveModal('none')}
-        quizCustomTitle={quizCustomTitle}
-        setQuizCustomTitle={setQuizCustomTitle}
-        quizQuestionCount={quizQuestionCount}
-        setQuizQuestionCount={setQuizQuestionCount}
-        quizCustomCount={quizCustomCount}
-        setQuizCustomCount={setQuizCustomCount}
-        quizTimerMinutes={quizTimerMinutes}
-        setQuizTimerMinutes={setQuizTimerMinutes}
-        quizCustomTimer={quizCustomTimer}
-        setQuizCustomTimer={setQuizCustomTimer}
-        quizScoringMode={quizScoringMode}
-        setQuizScoringMode={setQuizScoringMode}
-        quizTypes={quizTypes}
-        setQuizTypes={setQuizTypes}
-        quizThinkingMode={quizThinkingMode}
-        setQuizThinkingMode={setQuizThinkingMode}
-        selectedTag={selectedTag}
-        setSelectedTag={setSelectedTag}
-        availableTags={availableTags}
-        onAddNewTag={handleAddNewTag}
-        quizAttachedFiles={quizAttachedFiles}
-        setQuizAttachedFiles={setQuizAttachedFiles}
-        quizPrompt={quizPrompt}
-        setQuizPrompt={setQuizPrompt}
-        isGenerating={isGenerating}
-        generationError={generationError}
-        onLaunch={handleLaunchQuiz}
+        isOpen={activeModal === 'quiz'} onClose={() => setActiveModal('none')}
+        quizCustomTitle={quizCustomTitle} setQuizCustomTitle={setQuizCustomTitle}
+        quizQuestionCount={quizQuestionCount} setQuizQuestionCount={setQuizQuestionCount}
+        quizCustomCount={quizCustomCount} setQuizCustomCount={setQuizCustomCount}
+        quizTimerMinutes={quizTimerMinutes} setQuizTimerMinutes={setQuizTimerMinutes}
+        quizCustomTimer={quizCustomTimer} setQuizCustomTimer={setQuizCustomTimer}
+        quizScoringMode={quizScoringMode} setQuizScoringMode={setQuizScoringMode}
+        quizTypes={quizTypes} setQuizTypes={setQuizTypes}
+        quizThinkingMode={quizThinkingMode} setQuizThinkingMode={setQuizThinkingMode}
+        selectedTag={selectedTag} setSelectedTag={setSelectedTag}
+        availableTags={availableTags} onAddNewTag={handleAddNewTag}
+        quizAttachedFiles={quizAttachedFiles} setQuizAttachedFiles={setQuizAttachedFiles}
+        quizPrompt={quizPrompt} setQuizPrompt={setQuizPrompt}
+        isGenerating={isGenerating} generationError={generationError} onLaunch={handleLaunchQuiz}
       />
-
       <ProgrammingModal
-        isOpen={activeModal === 'programming'}
-        onClose={() => setActiveModal('none')}
-        progCustomTitle={progCustomTitle}
-        setProgCustomTitle={setProgCustomTitle}
-        progDifficulty={progDifficulty}
-        setProgDifficulty={setProgDifficulty}
-        selectedTag={selectedTag}
-        setSelectedTag={setSelectedTag}
-        availableTags={availableTags}
-        onAddNewTag={handleAddNewTag}
-        progAttachedFiles={progAttachedFiles}
-        setProgAttachedFiles={setProgAttachedFiles}
-        progPrompt={progPrompt}
-        setProgPrompt={setProgPrompt}
-        isGenerating={isGenerating}
-        onLaunch={handleLaunchProgramming}
+        isOpen={activeModal === 'programming'} onClose={() => setActiveModal('none')}
+        progCustomTitle={progCustomTitle} setProgCustomTitle={setProgCustomTitle}
+        progDifficulty={progDifficulty} setProgDifficulty={setProgDifficulty}
+        selectedTag={selectedTag} setSelectedTag={setSelectedTag}
+        availableTags={availableTags} onAddNewTag={handleAddNewTag}
+        progAttachedFiles={progAttachedFiles} setProgAttachedFiles={setProgAttachedFiles}
+        progPrompt={progPrompt} setProgPrompt={setProgPrompt}
+        isGenerating={isGenerating} onLaunch={handleLaunchProgramming}
       />
-
       <AnalysisModal
-        isOpen={activeModal === 'analysis'}
-        onClose={() => setActiveModal('none')}
-        analysisCustomTitle={analysisCustomTitle}
-        setAnalysisCustomTitle={setAnalysisCustomTitle}
-        analysisDifficulty={analysisDifficulty}
-        setAnalysisDifficulty={setAnalysisDifficulty}
-        selectedTag={selectedTag}
-        setSelectedTag={setSelectedTag}
-        availableTags={availableTags}
-        onAddNewTag={handleAddNewTag}
-        analysisAttachedFiles={analysisAttachedFiles}
-        setAnalysisAttachedFiles={setAnalysisAttachedFiles}
-        analysisPrompt={analysisPrompt}
-        setAnalysisPrompt={setAnalysisPrompt}
-        isGenerating={isGenerating}
-        onLaunch={handleLaunchAnalysis}
+        isOpen={activeModal === 'analysis'} onClose={() => setActiveModal('none')}
+        analysisCustomTitle={analysisCustomTitle} setAnalysisCustomTitle={setAnalysisCustomTitle}
+        analysisDifficulty={analysisDifficulty} setAnalysisDifficulty={setAnalysisDifficulty}
+        selectedTag={selectedTag} setSelectedTag={setSelectedTag}
+        availableTags={availableTags} onAddNewTag={handleAddNewTag}
+        analysisAttachedFiles={analysisAttachedFiles} setAnalysisAttachedFiles={setAnalysisAttachedFiles}
+        analysisPrompt={analysisPrompt} setAnalysisPrompt={setAnalysisPrompt}
+        isGenerating={isGenerating} onLaunch={handleLaunchAnalysis}
       />
-
       <UploadModal
-        isOpen={activeModal === 'upload'}
-        onClose={() => setActiveModal('none')}
-        uploadStatus={uploadStatus}
-        ingestionFiles={ingestionFiles}
-        setIngestionFiles={setIngestionFiles}
-        uploadText={uploadText}
-        setUploadText={setUploadText}
-        onUpload={handleUploadWithAiAudit}
+        isOpen={activeModal === 'upload'} onClose={() => setActiveModal('none')}
+        uploadStatus={uploadStatus} ingestionFiles={ingestionFiles}
+        setIngestionFiles={setIngestionFiles} uploadText={uploadText}
+        setUploadText={setUploadText} onUpload={handleUploadWithAiAudit}
       />
-
-      <AdminModal
-        isOpen={activeModal === 'admin'}
-        onClose={() => setActiveModal('none')}
-        flaggedItems={flaggedItems}
-        onAction={handleAdminAction}
-      />
-
+      <AdminModal isOpen={activeModal === 'admin'} onClose={() => setActiveModal('none')} flaggedItems={flaggedItems} onAction={handleAdminAction} />
       <HistoryModal
-        isOpen={activeModal === 'history'}
-        onClose={() => setActiveModal('none')}
-        historyList={historyList}
-        studyMaterials={studyMaterials}
-        studyMaterialsError={studyMaterialsError}
-        onStartWeakQuiz={handleStartWeakQuiz}
+        isOpen={activeModal === 'history'} onClose={() => setActiveModal('none')}
+        historyList={historyList} studyMaterials={studyMaterials}
+        studyMaterialsError={studyMaterialsError} onStartWeakQuiz={handleStartWeakQuiz}
       />
-
       <SettingsModal
-        isOpen={activeModal === 'settings'}
-        onClose={() => setActiveModal('none')}
+        isOpen={activeModal === 'settings'} onClose={() => setActiveModal('none')}
         user={user}
         onProfileUpdated={(updates) => {
           if (updates.nickname) user.nickname = updates.nickname;
@@ -1299,8 +1134,7 @@ Output strictly as JSON without markdown:
           setCurrentYear(yr);
           await supabase.from('profiles').update({ study_year: yr }).eq('id', user.id);
         }}
-        apiKeyInput={apiKeyInput}
-        setApiKeyInput={setApiKeyInput}
+        apiKeyInput={apiKeyInput} setApiKeyInput={setApiKeyInput}
         onSaveKey={() => {
           const trimmed = apiKeyInput.trim();
           if (trimmed) localStorage.setItem('gemini_api_key', trimmed);
