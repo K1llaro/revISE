@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import type { AttachedFile, FlaggedMaterial, StudyYear, TestHistoryItem, QuestionReviewDetail, LeaderboardEntry, UserSession, StudyMaterial } from '../../types/ise';
+import { getGeminiModelUsage } from '../../lib/gemini';
 import { FileDropzone, ApiKeyTooltip } from '../common/LayoutComponents';
 
 /* ==========================================================================
@@ -897,6 +898,15 @@ export const HistoryModal: React.FC<{
 }> = ({ isOpen, onClose, historyList, studyMaterials, studyMaterialsError, onStartWeakQuiz }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [aiModelUsage, setAiModelUsage] = useState(() => getGeminiModelUsage());
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const refreshModelUsage = () => setAiModelUsage(getGeminiModelUsage());
+    refreshModelUsage();
+    window.addEventListener('revise-gemini-usage-updated', refreshModelUsage);
+    return () => window.removeEventListener('revise-gemini-usage-updated', refreshModelUsage);
+  }, [isOpen]);
 
   const [rangePreset, setRangePreset] = useState<'7' | '14' | 'custom'>('14');
   
@@ -1404,6 +1414,25 @@ export const HistoryModal: React.FC<{
                 <strong className="block text-2xl font-black text-sky-300 mt-1">{averageMcqSeconds === null ? '—' : `${averageMcqSeconds}s`}</strong>
                 <p className="text-[10px] text-slate-500 mt-1">{mcqResponseTimes.length ? `From ${mcqResponseTimes.length} timed answers` : 'Tracked on new multiple/single choice quizzes'}</p>
               </div>
+            </section>
+
+            <section className="p-4 sm:p-5 rounded-2xl bg-[#030714] border border-white/10 space-y-3">
+              <h4 className="text-sm font-bold text-white">AI models used on this device</h4>
+              {aiModelUsage.length === 0 ? (
+                <p className="text-[11px] text-slate-500">Models will appear here after they successfully generate a response.</p>
+              ) : (
+                <div className="space-y-2">
+                  {[...aiModelUsage].sort((a, b) => b.lastUsedAt.localeCompare(a.lastUsedAt)).map((model) => (
+                    <div key={model.modelName} className="flex items-center justify-between gap-3 text-xs">
+                      <span className="min-w-0 truncate font-mono text-slate-300">{model.modelName}</span>
+                      <span className="shrink-0 text-slate-500">Last used {new Date(model.lastUsedAt).toLocaleDateString()}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <p className="border-t border-white/10 pt-2 text-[10px] leading-relaxed text-slate-500">
+                This list only records models that successfully generated responses in this browser. It does not show request counts, Google AI Studio quota, or daily token usage.
+              </p>
             </section>
           </div>
         </div>

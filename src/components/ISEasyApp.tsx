@@ -207,7 +207,7 @@ export default function ISEasyApp() {
       <BackgroundGradients />
 
       <div className="relative z-10 flex flex-col h-full w-full justify-between overflow-hidden">
-        <Navbar />
+        {!currentUser && <Navbar />}
 
         <main className={`flex-1 min-h-0 w-full flex flex-col justify-start overflow-x-hidden ${currentUser ? 'items-stretch overflow-hidden p-0' : 'items-center px-3 sm:px-6 lg:px-8 py-3 sm:py-6 overflow-y-auto'}`}>
           {currentUser ? (
