@@ -42,13 +42,19 @@ interface LearnClarification {
 
 const SUMMARY_MODES = [
   { id: 'very_short', label: 'Very Short Summary', maxCharacters: 700, guidance: 'Keep only the essential takeaway and a few critical facts.' },
-  { id: 'short', label: 'Short Summary', maxCharacters: 1400, guidance: 'Condense to the main ideas, key definitions, and essential relationships.' },
-  { id: 'standard', label: 'Standard Summary', maxCharacters: 2600, guidance: 'Cover the key ideas, definitions, steps, and useful examples concisely.' },
-  { id: 'expanded', label: 'Expanded Summary (Recommended)', maxCharacters: 4200, guidance: 'Explain all important ideas, definitions, relationships, and examples in clear structured notes.' },
-  { id: 'detailed', label: 'Detailed Summary', maxCharacters: 5500, guidance: 'Stay as close as practical to the slides: preserve all meaningful facts, steps, and examples while removing repetition, filler, and genuinely irrelevant information.' },
+  { id: 'short', label: 'Short Summary', maxCharacters: 2000, guidance: 'Condense the material to its main ideas, key definitions, essential steps, and the most useful examples. Still cover every major section and the ending slides.' },
+  { id: 'standard', label: 'Standard Summary', maxCharacters: 5000, guidance: 'Give a thorough study-ready explanation of every important idea, definition, process, relationship, formula, and example. Explain how and why things work, include key details from each section, and do not skip the final slides. This mode should be meaningfully detailed, not a brief overview.' },
+  { id: 'expanded', label: 'Expanded Summary (Recommended)', maxCharacters: 7000, guidance: 'Explain the important ideas, definitions, relationships, mechanisms, steps, formulas, and representative examples from every section and slide in clear structured notes.' },
+  { id: 'detailed', label: 'Detailed Summary', maxCharacters: 12000, guidance: 'Follow the source closely: cover every slide and section in order, preserving meaningful facts, definitions, mechanisms, steps, formulas, examples, and qualifications. Remove repetition, filler, and irrelevant information.' },
 ] as const;
 
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const getSupabaseErrorMessage = (error: unknown) => {
+  if (typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string') {
+    return error.message;
+  }
+  return error instanceof Error ? error.message : 'Unknown Supabase error';
+};
 
 const COMMON_TECHNICAL_TERMS: NoteTerm[] = [
   {
@@ -687,46 +693,98 @@ export const LearnWorkspace: React.FC<{
     setStatus('Reviewing your study material…');
     const selectedSummaryMode = SUMMARY_MODES.find((mode) => mode.id === summaryMode) || SUMMARY_MODES[3];
     const sourceNames = attachedFiles.map((file) => file.name);
+    let existingTags: string[] = [];
+    let tagWarning = '';
+    try {
+      const { data, error } = await supabase.from('curriculum_tags').select('name');
+      if (error) throw error;
+      existingTags = (data || []).map((tag) => tag.name).filter((tag): tag is string => typeof tag === 'string');
+    } catch (error) {
+      tagWarning = `Existing tags could not be loaded (${getSupabaseErrorMessage(error)}); moderation and submission will continue without tag matching.`;
+      console.warn('Could not load curriculum tags before Learn material moderation.', error);
+    }
     const textualFiles = attachedFiles
       .filter((file) => !file.isPdf)
-      .map((file) => `[File: ${file.name}]\n${(file.textContent || file.content).slice(0, 8000)}`);
+      .map((file) => `[File: ${file.name}]\n${file.textContent || file.content}`);
     const requestParts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }> = attachedFiles
       .filter((file) => file.isPdf && file.base64Data)
       .map((file) => ({ inlineData: { mimeType: 'application/pdf', data: file.base64Data || '' } }));
     requestParts.push({
       text: `You are the same strict academic content moderator used for revISE quiz uploads.
 Student year: ${currentYear}
+Learn subject and section: ${categories.find((category) => category.id === selectedCategoryId)?.name || 'Study notes'} / ${sections.find((section) => section.id === selectedSectionId)?.name || 'General'}
 Source filenames: ${sourceNames.join(', ') || 'Pasted study notes'}
+Existing curriculum tags (reuse an exact match when appropriate): ${existingTags.join(', ') || 'None'}
 Pasted notes and readable file contents:
 """
-${[sourceText, ...textualFiles].filter(Boolean).join('\n\n').slice(0, 10000)}
+${[sourceText, ...textualFiles].filter(Boolean).join('\n\n')}
 """
 
-Inspect PDF pages directly when attached. Approve only genuine Computer Science or Software Engineering study material. Reject vendor installers/software, personal/system logs, memes, jokes, and non-educational content. Mark niche or uncertain material as flagged.
-If approved, produce a faithful study-note summary preserving exact slide/section headings and the important concepts appropriate to the selected summary mode.
+Inspect the ENTIRE attached document and every PDF page, from the first page to the last. Do not stop after the first few topics. Before drafting, identify the distinct slide/section headings and main concepts throughout the source, including its final pages; then ensure the summary covers them in source order. Preserve exact slide/section headings where useful. If the source has more material than the selected mode can explain in depth, briefly cover every section rather than omitting later slides.
+Approve only genuine Computer Science or Software Engineering study material. Reject vendor installers/software, personal/system logs, memes, jokes, and non-educational content. Mark niche or uncertain material as flagged.
+If approved, produce a complete, faithful study-note summary of the entire source, preserving important concepts from the beginning, middle, and ending slides.
 Selected summary mode: ${selectedSummaryMode.label}
 Summary guidance: ${selectedSummaryMode.guidance}
-Hard maximum length: ${selectedSummaryMode.maxCharacters} characters.
+Approximate length target: about ${selectedSummaryMode.maxCharacters} characters. Treat this as a guide, not a hard cutoff: completeness and coverage of the final slides are more important than staying under the target. Never end mid-sentence or silently omit later sections to meet the target.
 Never invent details. Do not retain the original file or full source transcript.
 Write the summary in clean, readable Markdown. Use normal Unicode for powers, subscripts, and symbols (for example, 2²⁰ = 1 MiB); do not output LaTeX delimiters ($), LaTeX commands, or raw markup such as \text{}.
 After writing the summary, carefully scan every sentence and heading for technical concepts a student may not know. Include all specialist terms and non-obvious abbreviations/acronyms, including multi-word terms, even when their meaning is only implied by surrounding text. In particular, in digital logic identify terms such as open drain, open collector, totem pole, pull-up resistor, wire-OR/wired-OR, wired-AND, high impedance, floating input, active-low, TTL, and CMOS whenever they appear and are not explicitly explained in plain language. Do not omit a term just because it appears in a heading or inside another highlighted term. Exclude only ordinary words, very common basic abbreviations CPU, GPU, RAM, or terms already clearly defined.
-For every term, use the exact spelling/case from the summary. Explain it in everyday language a beginner can picture; avoid unexplained jargon in the explanation. Also give a simple analogy when helpful, a concrete example when possible, and why the idea is useful/what job it does. Keep each field short.
+For every term, use the exact spelling/case from the summary. Explain it in everyday language a beginner can picture; avoid unexplained jargon. Keep each field concise and include an analogy, example, and purpose only when useful. Return at most 20 terms, prioritizing the hardest concepts.
 
 Return JSON only:
-{"verdict":"approved|flagged|rejected","title":"short note title","reason":"brief moderation reason","cleanSummary":"summary following the selected mode and length limit","terms":[{"term":"exact term from cleanSummary","explanation":"simple beginner-friendly explanation","analogy":"everyday comparison or empty string","example":"concrete example or empty string","whyItMatters":"what job it does or why it is useful"}]}`,
+{"verdict":"approved|flagged|rejected","title":"short note title","tagName":"existing matching tag or concise new tag beginning with # and no more than 25 characters","reason":"brief moderation reason","cleanSummary":"complete summary of all source sections; the selected character count is a target, not a hard limit","terms":[{"term":"exact term from cleanSummary","explanation":"plain-language meaning, max 120 characters","analogy":"short everyday comparison or empty string","example":"short example or empty string","whyItMatters":"purpose in plain language or empty string"}]}`,
     });
 
     try {
-      const result = await callGemini(key, requestParts, false);
-      if (result.verdict !== 'approved') {
-        setStatus(result.verdict === 'flagged'
-          ? `Not saved: this material needs review. ${result.reason || ''}`
-          : `Not saved: the material did not pass academic-content moderation. ${result.reason || ''}`);
+      const result = await callGemini(key, requestParts, false, 6000);
+      if (!['approved', 'flagged', 'rejected'].includes(result.verdict)) {
+        throw new Error('The AI moderation response did not include a valid verdict.');
+      }
+      if (result.verdict === 'rejected') {
+        setStatus(`Not saved: the material did not pass academic-content moderation. ${result.reason || ''}`);
         return;
       }
 
-      const summary = String(result.cleanSummary || '').trim().slice(0, 5500);
+      const summary = String(result.cleanSummary || '').trim();
       if (!summary) throw new Error('The AI returned an empty study summary. Please try again.');
+      const moderationTitle = String(result.title || sourceNames[0] || 'Learn study material').trim().slice(0, 160);
+      const proposedTag = typeof result.tagName === 'string'
+        ? `#${result.tagName.trim().replace(/^#+/, '').replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_#-]/g, '').slice(0, 24)}`
+        : '';
+      const normalizedProposedTag = proposedTag.length > 1 ? proposedTag : '#General';
+      const tagName = existingTags.find((tag) => tag.toLocaleLowerCase() === normalizedProposedTag.toLocaleLowerCase()) || normalizedProposedTag;
+      const { error: tagError } = await supabase
+        .from('curriculum_tags')
+        .upsert({ name: tagName }, { onConflict: 'name' });
+      if (tagError) {
+        tagWarning = `${tagWarning ? `${tagWarning} ` : ''}The tag could not be added to curriculum_tags (${tagError.message}); the material itself will still be submitted.`;
+        console.warn('Could not register the curriculum tag for Learn material.', tagError);
+      }
+
+      const { data: curriculumMaterial, error: materialError } = await supabase
+        .from('curriculum_materials')
+        .insert({
+          submitted_by: user.id,
+          submitter_email: user.email,
+          title: moderationTitle,
+          tag_name: tagName,
+          content_text: summary,
+          status: result.verdict,
+          ai_verdict_reason: result.verdict === 'flagged'
+            ? `Submitted from Learn for admin review: ${String(result.reason || 'The AI could not confidently approve this material.').slice(0, 1000)}`
+            : `AI Guardrail approved Learn material from ${categories.find((category) => category.id === selectedCategoryId)?.name || 'Learn'} / ${sections.find((section) => section.id === selectedSectionId)?.name || 'Study notes'}.`,
+        })
+        .select('id')
+        .single();
+      if (materialError) throw new Error(`Could not submit the moderated material to the shared curriculum: ${materialError.message}`);
+
+      if (result.verdict === 'flagged') {
+        setComposerText('');
+        setAttachedFiles([]);
+        setStatus(`This material needs admin review. A compact report was sent to the Admin menu; it will not be used in quizzes unless approved. ${tagWarning}`);
+        return;
+      }
+
       const terms: NoteTerm[] = Array.isArray(result.terms)
         ? result.terms
           .filter((item: Partial<NoteTerm>) =>
@@ -736,13 +794,13 @@ Return JSON only:
             && item.explanation.trim().length > 0
             && summary.toLocaleLowerCase().includes(item.term.trim().toLocaleLowerCase())
           )
-          .slice(0, 35)
+          .slice(0, 20)
           .map((item: Partial<NoteTerm>) => ({
             term: item.term!.trim().slice(0, 60),
-            explanation: item.explanation!.trim().slice(0, 180),
-            analogy: typeof item.analogy === 'string' ? item.analogy.trim().slice(0, 160) : undefined,
-            example: typeof item.example === 'string' ? item.example.trim().slice(0, 160) : undefined,
-            whyItMatters: typeof item.whyItMatters === 'string' ? item.whyItMatters.trim().slice(0, 160) : undefined,
+            explanation: item.explanation!.trim().slice(0, 120),
+            analogy: typeof item.analogy === 'string' ? item.analogy.trim().slice(0, 100) : undefined,
+            example: typeof item.example === 'string' ? item.example.trim().slice(0, 100) : undefined,
+            whyItMatters: typeof item.whyItMatters === 'string' ? item.whyItMatters.trim().slice(0, 100) : undefined,
           }))
         : [];
       const { data, error } = await supabase
@@ -750,21 +808,42 @@ Return JSON only:
         .insert({
           user_id: user.id,
           section_id: selectedSectionId,
-          title: String(result.title || sourceNames[0] || 'Study note').slice(0, 160),
-          content_text: summary.slice(0, selectedSummaryMode.maxCharacters),
+          title: moderationTitle,
+          content_text: summary,
           source_name: sourceNames.join(', ').slice(0, 500) || null,
           terms,
         })
         .select('id, title, content_text, source_name, created_at, terms')
         .single();
-      if (error) throw error;
+      if (error) {
+        if (error.code === '23514' && error.message.includes('learn_notes_content_text_check')) {
+          const { error: rollbackError } = await supabase
+            .from('curriculum_materials')
+            .delete()
+            .eq('id', curriculumMaterial.id)
+            .eq('submitted_by', user.id);
+          const rollbackMessage = rollbackError
+            ? ` The shared curriculum copy could not be removed automatically (${rollbackError.message}).`
+            : '';
+          throw new Error(`Supabase is still enforcing the old note length limit. Run supabase/learn-note-content-limit.sql in Supabase SQL Editor, then try again.${rollbackMessage}`);
+        }
+        const { error: rollbackError } = await supabase
+          .from('curriculum_materials')
+          .delete()
+          .eq('id', curriculumMaterial.id)
+          .eq('submitted_by', user.id);
+        if (rollbackError) {
+          throw new Error(`${error.message} The curriculum copy could not be removed automatically (${rollbackError.message}).`);
+        }
+        throw error;
+      }
 
       setNotes((current) => [...current, data as LearnNote]);
       setComposerText('');
       setAttachedFiles([]);
-      setStatus('Approved and saved privately to this section. The original files were not stored.');
+      setStatus(`Approved and saved privately. A compact summary was also added to the shared curriculum as ${tagName}. Original files were not stored. ${tagWarning}`);
     } catch (error) {
-      setStatus(`Could not save study note: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setStatus(`Could not save study note: ${getSupabaseErrorMessage(error)}`);
     } finally {
       setIsSaving(false);
     }
@@ -1004,7 +1083,7 @@ Return JSON only:
               >
                 {SUMMARY_MODES.map((mode) => <option key={mode.id} value={mode.id}>{mode.label}</option>)}
               </select>
-              <span className="text-[10px] text-slate-600">{SUMMARY_MODES.find((mode) => mode.id === summaryMode)?.maxCharacters.toLocaleString()} character limit</span>
+              <span className="text-[10px] text-slate-600">~{SUMMARY_MODES.find((mode) => mode.id === summaryMode)?.maxCharacters.toLocaleString()} character target</span>
               <button
                 type="button"
                 aria-pressed={visualHintsEnabled}

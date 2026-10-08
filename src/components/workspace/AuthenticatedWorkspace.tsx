@@ -8,6 +8,19 @@ import { LearnWorkspace } from './LearnWorkspace';
 import { ActiveQuizView, QuizResultsView, ActiveProgView, ProgResultsView, ActiveAnalysisView, AnalysisResultsView } from './ActiveViews';
 import { QuizModal, ProgrammingModal, AnalysisModal, UploadModal, AdminModal, HistoryModal, SettingsModal, LeaderboardModal } from './WorkspaceModals';
 
+const HOME_PHRASES = [
+  'It\'s not that complicated.',
+  'Knowing is not equal to comprehending. Understanding is not equal to mastery.',
+  'Spend your time studying and practicing and Stripe will hire you!',
+  'If you can read this, then you are already better than an average student.',
+  'Imagine the possibilities after you successfully graduate...',
+  'Leave a review to help us make this website even better!',
+  'ISE gives you opportunities. Don\'t waste them.',
+  'Tonight\'s the night',
+  'Wakey wakey, eggs and bakey!',
+  'Maybe you should open your notes and revise them before attempting a quiz?',
+];
+
 export const AuthenticatedWorkspace: React.FC<{
   user: UserSession;
   onSignOut: () => void;
@@ -16,6 +29,40 @@ export const AuthenticatedWorkspace: React.FC<{
   const [currentView, setCurrentView] = useState<AppView>('station');
   const [activeModal, setActiveModal] = useState<ActiveModal>('none');
   const [workspaceMode, setWorkspaceMode] = useState<'home' | 'practice' | 'learn'>('home');
+  const [homePhrase, setHomePhrase] = useState('');
+  const homeEntryActiveRef = useRef(false);
+
+  useEffect(() => {
+    if (workspaceMode !== 'home' || currentView !== 'station') {
+      homeEntryActiveRef.current = false;
+      return;
+    }
+    if (homeEntryActiveRef.current) return;
+    homeEntryActiveRef.current = true;
+
+    const storageKey = `revise_home_recent_phrases_${user.id}`;
+    let recentPhrases: string[] = [];
+    try {
+      const saved = localStorage.getItem(storageKey);
+      const parsed: unknown = saved ? JSON.parse(saved) : [];
+      if (Array.isArray(parsed)) {
+        recentPhrases = parsed.filter((phrase): phrase is string => typeof phrase === 'string').slice(0, 2);
+      }
+    } catch (error) {
+      console.warn('Could not restore recent home phrases.', error);
+    }
+
+    const availablePhrases = HOME_PHRASES.filter((phrase) => !recentPhrases.includes(phrase));
+    const phrasePool = availablePhrases.length > 0 ? availablePhrases : HOME_PHRASES;
+    const nextPhrase = phrasePool[Math.floor(Math.random() * phrasePool.length)];
+    setHomePhrase(nextPhrase);
+
+    try {
+      localStorage.setItem(storageKey, JSON.stringify([nextPhrase, ...recentPhrases.filter((phrase) => phrase !== nextPhrase)].slice(0, 2)));
+    } catch (error) {
+      console.warn('Could not save recent home phrases.', error);
+    }
+  }, [currentView, user.id, workspaceMode]);
 
   const [currentYear, setCurrentYear] = useState<StudyYear>(user.studyYear || 'year1');
   const [yearPrompts, setYearPrompts] = useState<Record<StudyYear, string>>(DEFAULT_YEAR_PROMPTS);
@@ -1019,9 +1066,8 @@ Output strictly as JSON without markdown:
   ) : (
     <div className="w-full max-w-5xl mx-auto p-4 sm:p-8 flex-1 flex flex-col justify-center animate-fade-in text-left">
       <div className="mb-8 text-center">
-        <img src="/favicon.svg" alt="revISE logo" className="h-12 w-12 mx-auto mb-4" />
-        <h1 className="text-3xl sm:text-4xl font-black text-white">rev<span className="text-[#3ccb57]">ISE</span></h1>
-        <p className="mt-2 text-sm text-slate-400">Welcome, {user.nickname || user.email}</p>
+        <h1 className="text-5xl sm:text-6xl font-black text-white">Welcome, <span className="text-[#3ccb57]">{user.nickname || user.email}</span></h1>
+        <p className="mt-4 min-h-6 text-base sm:text-lg text-slate-400">{homePhrase}</p>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-7">
         <button type="button" onClick={() => { setWorkspaceMode('practice'); setCurrentView('station'); }} className="group min-h-[220px] sm:min-h-[300px] rounded-3xl border border-white/10 bg-[#060c20]/85 p-7 sm:p-10 text-left shadow-2xl transition-all hover:-translate-y-1 hover:border-[#3ccb57]/50 hover:shadow-[0_0_40px_rgba(60,203,87,0.16)]">
@@ -1043,20 +1089,20 @@ Output strictly as JSON without markdown:
   return (
     <div className={`w-full h-full min-h-0 flex flex-col text-left ${workspaceMode === 'learn' && currentView === 'station' ? 'bg-[#111111]' : ''}`}>
       <header className="relative z-40 shrink-0 border-b border-white/10 bg-[#080b14]/95 backdrop-blur-xl px-3 sm:px-5 py-2.5">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
           <div className="flex items-center justify-between gap-3">
-            <button type="button" onClick={() => { setCurrentView('station'); setWorkspaceMode('home'); }} className="flex min-w-0 items-center gap-2.5 text-left cursor-pointer">
-              <img src="/favicon.svg" alt="revISE logo" className="h-7 w-7 shrink-0 object-contain" />
-              <span className="min-w-0"><span className="block text-sm font-black text-white">rev<span className="text-[#3ccb57]">ISE</span></span><span className="block truncate text-[10px] text-slate-500">{user.nickname || user.email} · {user.apiKey ? 'AI Studio active' : 'No AI key'}</span></span>
+            <button type="button" onClick={() => { setCurrentView('station'); setWorkspaceMode('home'); }} className="flex min-w-0 items-center gap-3 text-left cursor-pointer">
+              <img src="/favicon.svg" alt="revISE logo" className="h-9 w-9 shrink-0 object-contain" />
+              <span className="min-w-0"><span className="block text-base font-black text-white">rev<span className="text-[#3ccb57]">ISE</span></span><span className="block truncate text-[11px] text-slate-500">{user.nickname || user.email} · {user.apiKey ? 'AI Studio active' : 'No AI key'}</span></span>
             </button>
-            <span className="hidden sm:inline-flex rounded-full border border-[#3ccb57]/30 bg-[#3ccb57]/10 px-2 py-1 text-[9px] font-mono font-bold uppercase text-[#3ccb57]">{currentYear}</span>
+            <span className="hidden sm:inline-flex rounded-full border border-[#3ccb57]/30 bg-[#3ccb57]/10 px-2.5 py-1 text-[10px] font-mono font-bold uppercase text-[#3ccb57]">{currentYear}</span>
           </div>
-          <div className="flex items-center gap-1.5 flex-wrap lg:justify-end">
-            {isAdmin && <button type="button" onClick={() => { loadData(); setActiveModal('admin'); }} className="inline-flex items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-950/20 px-2.5 py-1.5 text-[11px] font-bold text-amber-300 hover:bg-amber-950/40 cursor-pointer"><Shield className="h-3.5 w-3.5" /><span>Admin ({flaggedItems.length})</span></button>}
-            <button type="button" onClick={() => { fetchLeaderboardData(); setActiveModal('leaderboard'); }} className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1.5 text-[11px] text-slate-200 hover:bg-white/10 cursor-pointer"><Trophy className="h-3.5 w-3.5 text-[#3ccb57]" /><span>Leaderboard</span></button>
-            <button type="button" onClick={() => { loadData(); fetchStudyMaterials().catch(() => undefined); setActiveModal('history'); }} className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1.5 text-[11px] text-slate-200 hover:bg-white/10 cursor-pointer"><History className="h-3.5 w-3.5 text-[#3ccb57]" /><span>History &amp; Statistics</span></button>
-            <button type="button" onClick={() => setActiveModal('settings')} className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1.5 text-[11px] text-slate-200 hover:bg-white/10 cursor-pointer"><Settings className="h-3.5 w-3.5" /><span>Settings</span></button>
-            <button type="button" onClick={onSignOut} className="rounded-lg border border-red-500/20 bg-red-950/20 px-2.5 py-1.5 text-[11px] font-semibold text-red-300 hover:bg-red-950/40 cursor-pointer">Sign Out</button>
+          <div className="flex items-center gap-2 flex-wrap lg:justify-end">
+            {isAdmin && <button type="button" onClick={() => { loadData(); setActiveModal('admin'); }} className="inline-flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-950/20 px-3 py-2 text-xs font-bold text-amber-300 hover:bg-amber-950/40 cursor-pointer"><Shield className="h-4 w-4" /><span>Admin ({flaggedItems.length})</span></button>}
+            <button type="button" onClick={() => { fetchLeaderboardData(); setActiveModal('leaderboard'); }} className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-slate-200 hover:bg-white/10 cursor-pointer"><Trophy className="h-4 w-4 text-[#3ccb57]" /><span>Leaderboard</span></button>
+            <button type="button" onClick={() => { loadData(); fetchStudyMaterials().catch(() => undefined); setActiveModal('history'); }} className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-slate-200 hover:bg-white/10 cursor-pointer"><History className="h-4 w-4 text-[#3ccb57]" /><span>History &amp; Statistics</span></button>
+            <button type="button" onClick={() => setActiveModal('settings')} className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-slate-200 hover:bg-white/10 cursor-pointer"><Settings className="h-4 w-4" /><span>Settings</span></button>
+            <button type="button" onClick={onSignOut} className="rounded-lg border border-red-500/20 bg-red-950/20 px-3 py-2 text-xs font-semibold text-red-300 hover:bg-red-950/40 cursor-pointer">Sign Out</button>
           </div>
         </div>
       </header>

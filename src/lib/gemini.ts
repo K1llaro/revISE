@@ -151,7 +151,7 @@ const getGeminiModels = (apiKey: string): Promise<string[]> => {
 
 const wait = (milliseconds: number) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
-export const callGemini = async (apiKey: string, promptOrParts: string | any[], thinking = true) => {
+export const callGemini = async (apiKey: string, promptOrParts: string | any[], thinking = true, maxOutputTokens?: number) => {
   const errors: string[] = [];
   const parts = typeof promptOrParts === 'string' ? [{ text: promptOrParts }] : promptOrParts;
   const attemptedModels = new Set<string>();
@@ -164,6 +164,7 @@ export const callGemini = async (apiKey: string, promptOrParts: string | any[], 
           const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${apiKey}`;
           const generationConfig: Record<string, unknown> = { responseMimeType: 'application/json' };
           if (thinking) generationConfig.thinkingConfig = { thinkingLevel: 'medium' };
+          if (maxOutputTokens) generationConfig.maxOutputTokens = maxOutputTokens;
           const requestBody = { contents: [{ parts }], generationConfig };
 
           const response = await fetch(endpoint, {
