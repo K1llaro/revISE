@@ -1686,7 +1686,7 @@ export const SettingsModal: React.FC<{
 
           {/* 4. Google AI Studio Key */}
           <div>
-            <div className="flex justify-between text-xs font-semibold text-slate-300 mb-1.5">
+            <div className="flex flex-wrap items-center gap-x-2 text-xs font-semibold text-slate-300 mb-1.5">
               <span>Google AI Studio API Key (Local Device Storage)</span>
               <ApiKeyTooltip />
             </div>

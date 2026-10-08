@@ -9,7 +9,7 @@ export const ApiKeyTooltip: React.FC = () => {
     <div className="relative inline-block" onMouseEnter={() => setIsVisible(true)} onMouseLeave={() => setIsVisible(false)}>
       <button type="button" onClick={() => setIsVisible(!isVisible)} className="text-xs text-slate-400 hover:text-[#3ccb57] flex items-center gap-1 cursor-pointer">
         <HelpCircle className="h-3.5 w-3.5" />
-        <span className="underline">Get Free Key</span>
+        <span className="underline">How to get an API key?</span>
       </button>
       {isVisible && (
         <div className="absolute right-0 sm:left-1/2 bottom-full mb-3 z-50 w-64 sm:w-72 sm:-translate-x-1/2 rounded-xl border border-white/15 bg-[#060c20]/95 p-3 text-left shadow-2xl backdrop-blur-xl text-[11px] text-slate-300 space-y-1">

@@ -1,5 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { BookOpen, Check, ChevronDown, Eye, EyeOff, FilePlus2, FolderPlus, Loader2, MessageCircle, Paperclip, Pencil, Plus, Send, Trash2, X } from 'lucide-react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { BookOpen, Check, ChevronDown, ChevronLeft, ChevronRight, Eye, EyeOff, FilePlus2, FolderPlus, Loader2, Maximize2, MessageCircle, Minus, Paperclip, Pencil, Plus, Send, Trash2, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import type { AttachedFile, UserSession } from '../../types/ise';
 import { callGemini, readFileForGemini } from '../../lib/gemini';
@@ -184,7 +185,7 @@ const formatMathNotation = (value: string) => {
 
 const normalizeInlineMath = (text: string) => text.replace(/\$([^$\n]+)\$/g, (_match, math: string) => formatMathNotation(math));
 
-const renderInlineText = (text: string, terms: NoteTerm[], onTermHover?: (term: NoteTerm, x: number, y: number) => void, onTermLeave?: () => void) => {
+const renderInlineText = (text: string, terms: NoteTerm[], onTermHover?: (term: NoteTerm, x: number, y: number) => void, onTermLeave?: () => void, paperTheme = false) => {
   const sortedTerms = [...terms]
     .filter((term) => term.term.trim())
     .sort((first, second) => second.term.length - first.term.length);
@@ -199,13 +200,13 @@ const renderInlineText = (text: string, terms: NoteTerm[], onTermHover?: (term: 
       return <span key={`${part}-${index}`} className="text-emerald-400 underline decoration-emerald-500/40 decoration-dotted underline-offset-4 cursor-help" title={`${term.explanation}${term.example ? ` Example: ${term.example}` : ''}`} onMouseEnter={(event) => onTermHover?.(term, event.clientX, event.clientY)} onMouseMove={(event) => onTermHover?.(term, event.clientX, event.clientY)} onMouseLeave={onTermLeave}>{part}</span>;
     }
     if ((part.startsWith('**') && part.endsWith('**')) || (part.startsWith('__') && part.endsWith('__'))) {
-      return <strong key={`${part}-${index}`} className="font-semibold text-slate-100">{renderInlineText(part.slice(2, -2), terms, onTermHover, onTermLeave)}</strong>;
+      return <strong key={`${part}-${index}`} className={`font-semibold ${paperTheme ? 'text-[#282319]' : 'text-slate-100'}`}>{renderInlineText(part.slice(2, -2), terms, onTermHover, onTermLeave, paperTheme)}</strong>;
     }
     if ((part.startsWith('*') && part.endsWith('*')) || (part.startsWith('_') && part.endsWith('_'))) {
-      return <em key={`${part}-${index}`}>{renderInlineText(part.slice(1, -1), terms, onTermHover, onTermLeave)}</em>;
+      return <em key={`${part}-${index}`}>{renderInlineText(part.slice(1, -1), terms, onTermHover, onTermLeave, paperTheme)}</em>;
     }
     if (part.startsWith('`') && part.endsWith('`')) {
-      return <code key={`${part}-${index}`} className="rounded bg-black/30 px-1 py-0.5 font-mono text-[0.9em] text-emerald-200">{part.slice(1, -1)}</code>;
+      return <code key={`${part}-${index}`} className={`rounded px-1 py-0.5 font-mono text-[0.9em] ${paperTheme ? 'bg-[#d9c9a5] text-[#302a20]' : 'bg-black/30 text-emerald-200'}`}>{part.slice(1, -1)}</code>;
     }
     return part;
   });
@@ -215,9 +216,10 @@ const FormattedMarkdown: React.FC<{
   content: string;
   terms?: NoteTerm[];
   className?: string;
+  paperTheme?: boolean;
   onTermHover?: (term: NoteTerm, x: number, y: number) => void;
   onTermLeave?: () => void;
-}> = ({ content, terms = [], className = '', onTermHover, onTermLeave }) => {
+}> = ({ content, terms = [], className = '', paperTheme = false, onTermHover, onTermLeave }) => {
   const lines = content.replace(/\r\n/g, '\n').split('\n');
   const blocks: React.ReactNode[] = [];
   let codeLines: string[] = [];
@@ -226,7 +228,7 @@ const FormattedMarkdown: React.FC<{
   lines.forEach((line, index) => {
     if (line.trim().startsWith('```')) {
       if (inCodeBlock) {
-        blocks.push(<pre key={`code-${index}`} className="overflow-x-auto rounded-lg bg-black/40 p-3 font-mono text-xs leading-6 text-emerald-200"><code>{codeLines.join('\n')}</code></pre>);
+        blocks.push(<pre key={`code-${index}`} className={`overflow-x-auto rounded-lg p-3 font-mono text-xs ${paperTheme ? 'bg-[#dfd0ad] leading-[30px] text-[#302a20]' : 'bg-black/40 leading-6 text-emerald-200'}`}><code>{codeLines.join('\n')}</code></pre>);
         codeLines = [];
       }
       inCodeBlock = !inCodeBlock;
@@ -237,7 +239,7 @@ const FormattedMarkdown: React.FC<{
       return;
     }
     if (!line.trim()) {
-      blocks.push(<div key={`space-${index}`} className="h-2" />);
+      blocks.push(<div key={`space-${index}`} className={paperTheme ? 'h-[30px]' : 'h-2'} />);
       return;
     }
 
@@ -245,7 +247,7 @@ const FormattedMarkdown: React.FC<{
     if (heading) {
       const level = heading[1].length;
       const headingClass = level <= 2 ? 'text-lg font-bold text-white' : level === 3 ? 'text-base font-semibold text-slate-100' : 'text-sm font-semibold text-slate-200';
-      blocks.push(<h3 key={`heading-${index}`} className={`${headingClass} pt-2`}>{renderInlineText(heading[2], terms, onTermHover, onTermLeave)}</h3>);
+      blocks.push(<h3 key={`heading-${index}`} className={`${paperTheme ? 'text-[#282319] leading-[30px]' : `${headingClass} pt-2`} font-bold`}>{renderInlineText(heading[2], terms, onTermHover, onTermLeave, paperTheme)}</h3>);
       return;
     }
 
@@ -253,9 +255,9 @@ const FormattedMarkdown: React.FC<{
     const ordered = line.match(/^\s*\d+[.)]\s+(.+)$/);
     if (unordered || ordered) {
       blocks.push(
-        <div key={`list-${index}`} className="flex gap-2 pl-2">
-          <span className="shrink-0 text-emerald-500">{unordered ? '•' : `${line.match(/^\s*(\d+)[.)]/)?.[1]}.`}</span>
-          <span className="min-w-0">{renderInlineText((unordered || ordered)![1], terms, onTermHover, onTermLeave)}</span>
+        <div key={`list-${index}`} className={`flex gap-2 pl-2 ${paperTheme ? 'leading-[30px]' : ''}`}>
+          <span className={`shrink-0 ${paperTheme ? 'text-[#8b6c32]' : 'text-emerald-500'}`}>{unordered ? '•' : `${line.match(/^\s*(\d+)[.)]/)?.[1]}.`}</span>
+          <span className="min-w-0">{renderInlineText((unordered || ordered)![1], terms, onTermHover, onTermLeave, paperTheme)}</span>
         </div>
       );
       return;
@@ -264,19 +266,29 @@ const FormattedMarkdown: React.FC<{
     const quote = line.match(/^\s*>\s?(.*)$/);
     blocks.push(
       quote
-        ? <blockquote key={`quote-${index}`} className="border-l-2 border-emerald-500/50 pl-3 text-slate-400">{renderInlineText(quote[1], terms, onTermHover, onTermLeave)}</blockquote>
-        : <p key={`paragraph-${index}`} className="min-h-[1.5em]">{renderInlineText(line, terms, onTermHover, onTermLeave)}</p>
+        ? <blockquote key={`quote-${index}`} className={`border-l-2 pl-3 ${paperTheme ? 'border-[#aa8b52] leading-[30px] text-[#554a36]' : 'border-emerald-500/50 text-slate-400'}`}>{renderInlineText(quote[1], terms, onTermHover, onTermLeave, paperTheme)}</blockquote>
+        : <p key={`paragraph-${index}`} className={paperTheme ? 'min-h-[30px] leading-[30px]' : 'min-h-[1.5em]'}>{renderInlineText(line, terms, onTermHover, onTermLeave, paperTheme)}</p>
     );
   });
 
   if (codeLines.length > 0) {
-    blocks.push(<pre key="code-end" className="overflow-x-auto rounded-lg bg-black/40 p-3 font-mono text-xs leading-6 text-emerald-200"><code>{codeLines.join('\n')}</code></pre>);
+    blocks.push(<pre key="code-end" className={`overflow-x-auto rounded-lg p-3 font-mono text-xs ${paperTheme ? 'bg-[#dfd0ad] leading-[30px] text-[#302a20]' : 'bg-black/40 leading-6 text-emerald-200'}`}><code>{codeLines.join('\n')}</code></pre>);
   }
 
-  return <div className={`mt-4 space-y-1 whitespace-pre-wrap text-sm leading-7 text-slate-300 ${className}`}>{blocks}</div>;
+  return (
+    <div
+      className={`mt-4 whitespace-pre-wrap text-sm ${paperTheme ? 'space-y-0 leading-[30px] break-words text-[#302a20]' : 'space-y-1 leading-7 text-slate-300'} ${className}`}
+      style={paperTheme ? {
+        backgroundImage: 'linear-gradient(to bottom, transparent 29px, rgba(128, 103, 61, 0.2) 30px)',
+        backgroundSize: '100% 30px',
+      } : undefined}
+    >
+      {blocks}
+    </div>
+  );
 };
 
-const AnnotatedSummary: React.FC<{ content: string; terms: NoteTerm[]; visualHintsEnabled: boolean }> = ({ content, terms, visualHintsEnabled }) => {
+const AnnotatedSummary: React.FC<{ content: string; terms: NoteTerm[]; visualHintsEnabled: boolean; paperTheme?: boolean }> = ({ content, terms, visualHintsEnabled, paperTheme = false }) => {
   const [hoveredTerm, setHoveredTerm] = useState<{ term: NoteTerm; x: number; y: number } | null>(null);
   const orderedTerms = visualHintsEnabled
     ? getVisibleTerms(content, terms).filter((term) => term.term.trim() && term.explanation.trim()).sort((a, b) => b.term.length - a.term.length)
@@ -297,10 +309,11 @@ const AnnotatedSummary: React.FC<{ content: string; terms: NoteTerm[]; visualHin
       <FormattedMarkdown
         content={content}
         terms={orderedTerms}
+        paperTheme={paperTheme}
         onTermHover={(term, x, y) => setHoveredTerm({ term, x, y })}
         onTermLeave={() => setHoveredTerm(null)}
       />
-      {hoveredTerm && tooltipPosition && (
+      {hoveredTerm && tooltipPosition && typeof document !== 'undefined' && createPortal(
         <div
           role="tooltip"
           style={tooltipPosition}
@@ -311,7 +324,8 @@ const AnnotatedSummary: React.FC<{ content: string; terms: NoteTerm[]; visualHin
           {hoveredTerm.term.analogy && <p className="mt-2 text-[11px] leading-relaxed text-slate-300"><span className="font-semibold text-slate-200">Think of it as: </span>{hoveredTerm.term.analogy}</p>}
           {hoveredTerm.term.example && <p className="mt-2 text-[11px] leading-relaxed text-slate-400"><span className="font-semibold text-slate-300">Example: </span>{hoveredTerm.term.example}</p>}
           {hoveredTerm.term.whyItMatters && <p className="mt-2 border-t border-white/10 pt-2 text-[11px] leading-relaxed text-slate-400"><span className="font-semibold text-slate-300">Why it matters: </span>{hoveredTerm.term.whyItMatters}</p>}
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );
@@ -319,10 +333,64 @@ const AnnotatedSummary: React.FC<{ content: string; terms: NoteTerm[]; visualHin
 
 type SummaryModeId = typeof SUMMARY_MODES[number]['id'];
 
+type NotebookPage = {
+  note: LearnNote;
+  content: string;
+  startsNote: boolean;
+};
+
+const paginateNotebookNotes = (notes: LearnNote[], pageCharacterTarget = 1250): NotebookPage[] =>
+  notes.flatMap((note) => {
+    const content = typeof note.content_text === 'string' ? note.content_text : '';
+    const blocks = content.split(/\n\s*\n/).map((block) => block.trim()).filter(Boolean);
+    const noteBlocks: string[] = [];
+    let currentPage = '';
+    const flushPage = () => {
+      if (currentPage.trim()) noteBlocks.push(currentPage.trim());
+      currentPage = '';
+    };
+
+    for (const block of blocks) {
+      if (block.length > pageCharacterTarget) {
+        flushPage();
+        let remainder = block;
+        while (remainder.length > pageCharacterTarget) {
+          const target = remainder.slice(0, pageCharacterTarget);
+          const lastNewline = target.lastIndexOf('\n');
+          const lastSentence = Math.max(target.lastIndexOf('. '), target.lastIndexOf('? '), target.lastIndexOf('! '));
+          const lastSpace = target.lastIndexOf(' ');
+          const splitAt = lastNewline > pageCharacterTarget * 0.6
+            ? lastNewline
+            : lastSentence > pageCharacterTarget * 0.6
+              ? lastSentence + 1
+              : lastSpace > 0
+                ? lastSpace
+                : pageCharacterTarget;
+          noteBlocks.push(remainder.slice(0, splitAt).trim());
+          remainder = remainder.slice(splitAt).trim();
+        }
+        if (remainder) currentPage = remainder;
+        continue;
+      }
+      if (currentPage && currentPage.length + block.length + 2 > pageCharacterTarget) {
+        flushPage();
+      }
+      currentPage = currentPage ? `${currentPage}\n\n${block}` : block;
+    }
+    flushPage();
+
+    return noteBlocks.map((content, index) => ({
+      note,
+      content,
+      startsNote: index === 0,
+    }));
+  });
+
 export const LearnWorkspace: React.FC<{
   user: UserSession;
   currentYear: string;
-}> = ({ user, currentYear }) => {
+  onBack: () => void;
+}> = ({ user, currentYear, onBack }) => {
   const [categories, setCategories] = useState<LearnCategory[]>([]);
   const [sections, setSections] = useState<LearnSection[]>([]);
   const [notes, setNotes] = useState<LearnNote[]>([]);
@@ -332,6 +400,21 @@ export const LearnWorkspace: React.FC<{
   const [selectionMenu, setSelectionMenu] = useState<{ x: number; y: number } | null>(null);
   const [clarificationQuestion, setClarificationQuestion] = useState('');
   const [isAsking, setIsAsking] = useState(false);
+  const [notebookMode, setNotebookMode] = useState(false);
+  const [isNotebookFullscreen, setIsNotebookFullscreen] = useState(false);
+  const [notebookLayoutMode, setNotebookLayoutMode] = useState<'simple' | 'advanced'>('simple');
+  const [composerCollapsed, setComposerCollapsed] = useState(false);
+  const [bookPageIndex, setBookPageIndex] = useState(0);
+  const [notebookPageTarget, setNotebookPageTarget] = useState(1250);
+  const [bookTurnDirection, setBookTurnDirection] = useState<'next' | 'previous'>('next');
+  const [pageTurn, setPageTurn] = useState<{
+    direction: 'next' | 'previous';
+    page: NotebookPage;
+    pages: NotebookPage[];
+    targetPages: NotebookPage[];
+    targetPageIndex: number;
+  } | null>(null);
+  const [analysisStep, setAnalysisStep] = useState(0);
   const [noteToDelete, setNoteToDelete] = useState<LearnNote | null>(null);
   const [isDeletingNote, setIsDeletingNote] = useState(false);
   const [deleteNoteError, setDeleteNoteError] = useState<string | null>(null);
@@ -354,7 +437,52 @@ export const LearnWorkspace: React.FC<{
   const [loadError, setLoadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const summaryContainerRef = useRef<HTMLDivElement | null>(null);
+  const notebookPageRefs = useRef(new Map<string, HTMLElement>());
   const clarificationEndRef = useRef<HTMLDivElement | null>(null);
+  const loadingSteps = [
+    'Reading through your slides',
+    'Finding the key ideas and connections',
+    'Building a complete study summary',
+    'Polishing your notes for revision',
+  ];
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(`revise_learn_notebook_mode_${user.id}`);
+      if (saved !== null) setNotebookMode(saved === 'true');
+    } catch (error) {
+      console.warn('Could not restore notebook view preference.', error);
+    }
+  }, [user.id]);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(`revise_learn_notebook_layout_${user.id}`);
+      if (saved === 'simple' || saved === 'advanced') setNotebookLayoutMode(saved);
+    } catch (error) {
+      console.warn('Could not restore notebook layout preference.', error);
+    }
+  }, [user.id]);
+
+  useEffect(() => {
+    if (!isNotebookFullscreen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsNotebookFullscreen(false);
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [isNotebookFullscreen]);
+
+  useEffect(() => {
+    if (!isSaving) {
+      setAnalysisStep(0);
+      return;
+    }
+    const interval = window.setInterval(() => {
+      setAnalysisStep((step) => (step + 1) % loadingSteps.length);
+    }, 2400);
+    return () => window.clearInterval(interval);
+  }, [isSaving, loadingSteps.length]);
 
   useEffect(() => {
     try {
@@ -439,7 +567,11 @@ export const LearnWorkspace: React.FC<{
         .order('created_at', { ascending: true });
       if (error) throw error;
       if (!cancelled) {
-        setNotes((data || []).map((note) => ({ ...note, terms: Array.isArray(note.terms) ? note.terms : [] })) as LearnNote[]);
+        setNotes((data || []).map((note) => ({
+          ...note,
+          content_text: typeof note.content_text === 'string' ? note.content_text : '',
+          terms: Array.isArray(note.terms) ? note.terms : [],
+        })) as LearnNote[]);
       }
     };
     loadNotes().catch((error: Error) => setLoadError(error.message));
@@ -451,6 +583,8 @@ export const LearnWorkspace: React.FC<{
     setSelectedText('');
     setClarificationQuestion('');
     setSelectionMenu(null);
+    setBookPageIndex(0);
+    setNotebookPageTarget(1250);
     if (!selectedSectionId) {
       return;
     }
@@ -852,15 +986,125 @@ Return JSON only:
   const activeCategory = categories.find((category) => category.id === selectedCategoryId);
   const activeSection = sections.find((section) => section.id === selectedSectionId);
   const isAskPanelOpen = Boolean(activeSection && askEnabledSections.includes(activeSection.id));
+  const advancedNotebookPages = paginateNotebookNotes(notes, notebookPageTarget);
+  const notebookPageCount = advancedNotebookPages.length;
+  const notebookContentPages = notes.map((note) => ({
+    note,
+    content: note.content_text,
+    startsNote: true,
+  }));
+  const getNotebookPages = (pageIndex: number) => notebookLayoutMode === 'advanced'
+    ? advancedNotebookPages.slice(pageIndex, pageIndex + 2)
+    : advancedNotebookPages.slice(pageIndex, pageIndex + 1);
+  const visibleNotebookPages = getNotebookPages(bookPageIndex);
+  const displayedNotebookPages = (() => {
+    if (!pageTurn) return visibleNotebookPages;
+    const pages = [...pageTurn.pages];
+    if (pageTurn.direction === 'next') {
+      const revealedPage = pageTurn.targetPages[1] || pageTurn.targetPages[0];
+      if (revealedPage) pages[1] = revealedPage;
+    } else {
+      const revealedPage = pageTurn.targetPages[0];
+      if (revealedPage) pages[0] = revealedPage;
+    }
+    return pages;
+  })();
+  const turningPageBack = pageTurn
+    ? pageTurn.direction === 'next'
+      ? pageTurn.targetPages[0]
+      : pageTurn.targetPages[1] || pageTurn.targetPages[0]
+    : null;
+  const finishBookPageTurn = () => {
+    if (!pageTurn) return;
+    setBookPageIndex(pageTurn.targetPageIndex);
+    setPageTurn(null);
+  };
+
+  useEffect(() => {
+    const lastAvailablePage = Math.max(0, advancedNotebookPages.length - 1);
+    setBookPageIndex((index) => Math.min(index, lastAvailablePage));
+  }, [advancedNotebookPages.length, notebookLayoutMode, notes.length]);
+
+  useEffect(() => {
+    if (!pageTurn) return;
+    const timeout = window.setTimeout(() => {
+      setBookPageIndex(pageTurn.targetPageIndex);
+      setPageTurn(null);
+    }, 1400);
+    return () => window.clearTimeout(timeout);
+  }, [pageTurn]);
+
+  useLayoutEffect(() => {
+    if (!notebookMode || pageTurn) return;
+    const fitVisiblePages = () => {
+      const hasOverflow = [...notebookPageRefs.current.values()].some(
+        (page) => page.scrollHeight > page.clientHeight + 2
+      );
+      if (hasOverflow) {
+        setNotebookPageTarget((target) => target > 80 ? Math.max(80, Math.floor(target * 0.72)) : target);
+      }
+    };
+
+    fitVisiblePages();
+    window.addEventListener('resize', fitVisiblePages);
+    return () => window.removeEventListener('resize', fitVisiblePages);
+  }, [notebookMode, notebookPageTarget, bookPageIndex, notebookLayoutMode, advancedNotebookPages.length, notes.length, pageTurn]);
+
+  const turnBookPage = (direction: 'next' | 'previous') => {
+    if (pageTurn) return;
+    const step = notebookLayoutMode === 'advanced' ? 2 : 1;
+    const lastPage = Math.max(0, notebookPageCount - 1);
+    const targetPage = direction === 'next'
+      ? Math.min(lastPage, bookPageIndex + step)
+      : Math.max(0, bookPageIndex - step);
+    if (targetPage === bookPageIndex) return;
+    const targetPages = getNotebookPages(targetPage);
+    const turningPage = direction === 'next'
+      ? visibleNotebookPages[1] || visibleNotebookPages[0]
+      : visibleNotebookPages[0] || visibleNotebookPages[1];
+    if (!turningPage) return;
+
+    setBookTurnDirection(direction);
+    setPageTurn({
+      direction,
+      page: turningPage,
+      pages: visibleNotebookPages,
+      targetPages,
+      targetPageIndex: targetPage,
+    });
+  };
+
+  const getNoteSurfaceClass = (visibleIndex: number) => {
+    if (!notebookMode) return 'rounded-xl border border-white/[0.08] bg-[#191919] p-4 sm:p-5';
+    if (notebookLayoutMode === 'simple') {
+      return 'relative rounded-2xl border border-[#c9b98f] bg-[#f2e8ce] p-5 text-[#302a20] shadow-inner sm:p-8';
+    }
+    const pageEdgeClass = visibleIndex === 0
+      ? 'rounded-l-2xl lg:rounded-l-2xl lg:rounded-r-none lg:border-r-0'
+      : 'rounded-r-2xl lg:rounded-l-none lg:rounded-r-2xl';
+    const pageHeightClass = isNotebookFullscreen ? 'h-[calc(100dvh-4rem)] min-h-0' : 'h-[min(72vh,640px)] min-h-[420px]';
+    return `relative ${pageHeightClass} overflow-hidden border border-[#c9b98f] bg-[#f2e8ce] p-5 text-[#302a20] shadow-inner sm:p-8 ${pageEdgeClass}`;
+  };
 
   return (
     <div className="flex h-full min-h-0 w-full bg-[#111111] text-slate-100">
       <aside className="w-64 sm:w-72 shrink-0 border-r border-white/10 bg-[#171717] flex flex-col min-h-0">
-        <div className="p-4 border-b border-white/10">
-          <div className="flex items-center gap-2 text-sm font-semibold text-white">
-            <BookOpen className="h-4 w-4 text-emerald-400" /> My learning
+        <div className="flex items-start gap-3 border-b border-white/10 p-4">
+          <button
+            type="button"
+            onClick={onBack}
+            aria-label="Back to menu"
+            title="Back to menu"
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-slate-300 transition hover:border-white/20 hover:bg-white/10 hover:text-white cursor-pointer"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-sm font-semibold text-white">
+              <BookOpen className="h-4 w-4 text-emerald-400" /> My learning
+            </div>
+            <p className="mt-1 text-[11px] text-slate-500">Subjects and lecture sections</p>
           </div>
-          <p className="mt-1 text-[11px] text-slate-500">Subjects and lecture sections</p>
         </div>
         <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-2">
           {categories.map((category) => {
@@ -947,8 +1191,51 @@ Return JSON only:
           )}
           {loadError && <p className="px-2 pt-2 text-[11px] text-red-300 break-words">{loadError}</p>}
         </div>
-        <div className="border-t border-white/10 p-3 text-[10px] leading-relaxed text-slate-500">
-          Private to your account. Only moderated text summaries are stored.
+        <div className="shrink-0 border-t border-white/10 p-3">
+          <button
+            type="button"
+            aria-pressed={notebookMode}
+            onClick={() => {
+              const nextValue = !notebookMode;
+              setNotebookMode(nextValue);
+              setBookPageIndex(0);
+              try {
+                localStorage.setItem(`revise_learn_notebook_mode_${user.id}`, String(nextValue));
+              } catch (error) {
+                console.warn('Could not save notebook view preference.', error);
+              }
+            }}
+            className={`inline-flex items-center gap-2 rounded-lg border px-2.5 py-2 text-[11px] font-medium transition-colors ${notebookMode ? 'border-amber-300/30 bg-amber-200/[0.08] text-amber-100' : 'border-white/10 bg-white/[0.03] text-slate-400 hover:text-slate-200'}`}
+          >
+            <BookOpen className="h-3.5 w-3.5" /> Notebook: {notebookMode ? 'On' : 'Off'}
+          </button>
+          <div className={`mt-2 flex items-center justify-between gap-2 ${notebookMode ? '' : 'opacity-40'}`}>
+            <span className="text-[10px] text-slate-500">Layout</span>
+            <div className="inline-flex rounded-lg border border-white/10 bg-black/20 p-0.5">
+              {(['simple', 'advanced'] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  aria-pressed={notebookLayoutMode === mode}
+                  disabled={!notebookMode}
+                  onClick={() => {
+                    setNotebookLayoutMode(mode);
+                    setBookPageIndex(0);
+                    setPageTurn(null);
+                    try {
+                      localStorage.setItem(`revise_learn_notebook_layout_${user.id}`, mode);
+                    } catch (error) {
+                      console.warn('Could not save notebook layout preference.', error);
+                    }
+                  }}
+                  className={`rounded-md px-2.5 py-1 text-[10px] font-medium capitalize transition-colors ${!notebookMode ? 'cursor-not-allowed text-slate-600' : notebookLayoutMode === mode ? 'bg-amber-100 text-[#302719]' : 'text-slate-400 hover:text-slate-200'}`}
+                >
+                  {mode}
+                </button>
+              ))}
+            </div>
+          </div>
+          <p className="mt-2 text-[9px] leading-relaxed text-slate-600">Private to you · only moderated text summaries are stored.</p>
         </div>
       </aside>
 
@@ -957,11 +1244,24 @@ Return JSON only:
           <div className="min-w-0 text-xs text-slate-500 truncate">
             {activeCategory?.name || 'Choose a subject'}{activeSection ? <><span className="mx-2 text-slate-700">/</span><span className="text-slate-200">{activeSection.name}</span></> : null}
           </div>
-          <span className="text-[10px] text-slate-600 shrink-0">Private notebook</span>
+          <div className="flex shrink-0 items-center gap-2">
+            <span className="text-[10px] text-slate-600">Private notebook</span>
+            {notes.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setIsNotebookFullscreen(true)}
+                aria-label="Open Learn fullscreen"
+                title="Open Learn fullscreen"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1.5 text-[10px] text-slate-300 transition hover:border-amber-200/30 hover:bg-white/[0.08] hover:text-white"
+              >
+                <Maximize2 className="h-3.5 w-3.5" /> Full screen
+              </button>
+            )}
+          </div>
         </div>
         <div className="relative flex flex-1 min-h-0">
           <div ref={summaryContainerRef} onMouseUp={openAskForSelection} className="flex-1 min-w-0 min-h-0 overflow-y-auto px-4 sm:px-8 py-5">
-            <div className="max-w-3xl mx-auto space-y-5">
+              <div className={`mx-auto space-y-5 ${notebookMode ? 'max-w-5xl' : 'max-w-3xl'}`}>
               {!activeSection ? (
                 <div className="min-h-[40vh] flex flex-col items-center justify-center text-center">
                   <BookOpen className="h-9 w-9 text-slate-700 mb-4" />
@@ -970,26 +1270,188 @@ Return JSON only:
                 </div>
               ) : notes.length === 0 ? (
                 <div className="py-20 text-center text-sm text-slate-500">This section is empty. Add notes or attach lecture material below.</div>
-              ) : notes.map((note) => (
-                <article key={note.id} className="rounded-xl border border-white/[0.08] bg-[#191919] p-4 sm:p-5">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="min-w-0">
-                      <h2 className="text-sm font-semibold text-slate-100">{note.title}</h2>
-                      <time className="mt-1 block text-[10px] text-slate-600">{new Date(note.created_at).toLocaleString()}</time>
+                ) : (
+                  <>
+                    {notebookMode && notebookLayoutMode === 'advanced' && <style>{`
+                      @keyframes learn-page-turn-forward {
+                        0% { transform: rotateY(0); box-shadow: 0 8px 18px rgba(30,20,8,.22); }
+                        42% { box-shadow: 10px 10px 24px rgba(30,20,8,.34); }
+                        100% { transform: rotateY(-180deg); box-shadow: 0 3px 8px rgba(30,20,8,.12); }
+                      }
+                      @keyframes learn-page-turn-backward {
+                        0% { transform: rotateY(0); box-shadow: 0 8px 18px rgba(30,20,8,.22); }
+                        42% { box-shadow: -10px 10px 24px rgba(30,20,8,.34); }
+                        100% { transform: rotateY(180deg); box-shadow: 0 3px 8px rgba(30,20,8,.12); }
+                      }
+                      .learn-page-turn-leaf { transform-style: preserve-3d; animation-duration: .78s; animation-timing-function: cubic-bezier(.45,.02,.35,1); animation-fill-mode: both; }
+                      .learn-page-turn-leaf.forward { transform-origin: left center; animation-name: learn-page-turn-forward; }
+                      .learn-page-turn-leaf.backward { transform-origin: right center; animation-name: learn-page-turn-backward; }
+                      .learn-page-turn-face { backface-visibility: hidden; }
+                      .learn-page-turn-back { transform: rotateY(180deg); }
+                      @media (prefers-reduced-motion: reduce) { .learn-page-turn-leaf { animation-duration: .01ms; } }
+                    `}</style>}
+                    <div className={`${isNotebookFullscreen
+                      ? !notebookMode || notebookLayoutMode === 'simple'
+                        ? 'fixed inset-0 z-[80] flex items-start justify-center overflow-y-auto bg-black/60 p-4 shadow-none backdrop-blur-md sm:p-8'
+                        : 'fixed inset-0 z-[80] flex items-center justify-center overflow-hidden bg-black/60 p-4 shadow-none backdrop-blur-md sm:p-8'
+                      : 'contents'}${isNotebookFullscreen && isAskPanelOpen ? ' sm:pr-[360px]' : ''}`}>
+                      <div
+                        key={notebookMode ? `book-${bookPageIndex}` : 'notes-list'}
+                        className={notebookMode
+                          ? isNotebookFullscreen
+                            ? notebookLayoutMode === 'simple'
+                              ? 'relative my-auto grid w-full max-w-[820px] grid-cols-1 gap-3'
+                              : `relative grid w-full max-w-[1180px] grid-cols-1 items-center gap-3 lg:grid-cols-2 lg:gap-0 learn-page-${bookTurnDirection}`
+                            : notebookLayoutMode === 'simple'
+                              ? 'relative mx-auto grid w-full max-w-[820px] grid-cols-1 gap-3'
+                              : `relative grid grid-cols-1 gap-3 rounded-[1.75rem] border border-[#d8c89f] bg-[#332b1d] p-3 shadow-[0_24px_70px_rgba(0,0,0,0.5)] sm:p-5 lg:grid-cols-2 lg:gap-0 learn-page-${bookTurnDirection}`
+                          : isNotebookFullscreen
+                            ? 'relative mx-auto w-full max-w-3xl space-y-5 pb-4'
+                            : 'space-y-5'}
+                        style={notebookMode && notebookLayoutMode === 'advanced' ? { perspective: '1800px' } : undefined}
+                      >
+                      {(notebookMode
+                        ? notebookLayoutMode === 'simple' ? notebookContentPages : displayedNotebookPages
+                        : notebookContentPages
+                      ).map((page, visibleIndex) => (
+                        <article
+                          key={`${page.note.id}-${notebookMode ? `${bookPageIndex + visibleIndex}-${page.content.length}` : 'list'}`}
+                          ref={notebookMode ? (element) => {
+                            const pageKey = `${page.note.id}-${bookPageIndex + visibleIndex}-${page.content.length}`;
+                            if (element) notebookPageRefs.current.set(pageKey, element);
+                            else notebookPageRefs.current.delete(pageKey);
+                          } : undefined}
+                          className={getNoteSurfaceClass(visibleIndex)}
+                          style={notebookMode ? {
+                            backgroundImage: 'linear-gradient(#f5ecd7, #eee1c2)',
+                          } : undefined}
+                        >
+                          {notebookLayoutMode === 'advanced' && <div className={`absolute bottom-0 top-0 w-6 ${visibleIndex === 0 ? 'left-0 bg-gradient-to-r from-[#967c4a]/15 to-transparent' : 'right-0 bg-gradient-to-l from-[#967c4a]/15 to-transparent'}`} />}
+                          <div className="relative flex items-start justify-between gap-4">
+                            <div className="min-w-0">
+                              {page.startsNote && <h2 className={`break-words text-sm font-semibold ${notebookMode ? 'text-[#282319]' : 'text-slate-100'}`}>{page.note.title}</h2>}
+                              {page.startsNote && <time className={`mt-1 block text-[10px] ${notebookMode ? 'text-[#796b50]' : 'text-slate-600'}`}>{new Date(page.note.created_at).toLocaleString()}</time>}
+                            </div>
+                            {page.startsNote && <button type="button" onClick={() => { setDeleteNoteError(null); setNoteToDelete(page.note); }} aria-label={`Delete note ${page.note.title}`} title="Delete note" className={`shrink-0 rounded-lg p-2 cursor-pointer ${notebookMode ? 'text-[#796b50] hover:bg-red-900/10 hover:text-red-700' : 'text-slate-500 hover:bg-red-500/10 hover:text-red-300'}`}>
+                              <Trash2 className="h-4 w-4" />
+                            </button>}
+                          </div>
+                          {page.startsNote && page.note.source_name && <p className={`relative mt-1 text-[10px] ${notebookMode ? 'text-[#796b50]' : 'text-slate-500'}`}>Source: {page.note.source_name}</p>}
+                          <div className="relative">
+                            <AnnotatedSummary content={page.content} terms={page.note.terms || []} visualHintsEnabled={visualHintsEnabled} paperTheme={notebookMode} />
+                          </div>
+                          {notebookMode && notebookLayoutMode === 'advanced' && <span className="absolute bottom-4 right-5 font-serif text-[10px] italic text-[#8a7a59]">{pageTurn && pageTurn.direction === 'next' && visibleIndex === 1 ? pageTurn.targetPageIndex + 2 : pageTurn && pageTurn.direction === 'previous' && visibleIndex === 0 ? pageTurn.targetPageIndex + 1 : bookPageIndex + visibleIndex + 1}</span>}
+                        </article>
+                      ))}
+                      {notebookMode && notebookLayoutMode === 'advanced' && displayedNotebookPages.length === 1 && (
+                        <div className={`relative flex ${isNotebookFullscreen ? 'h-[calc(100dvh-4rem)] min-h-0' : 'h-[min(72vh,640px)] min-h-[420px]'} flex-col items-center justify-center rounded-r-2xl border border-[#c9b98f] p-8 text-center text-[#796b50] shadow-inner`} style={{ backgroundImage: 'linear-gradient(#f5ecd7, #eee1c2)' }}>
+                          <BookOpen className="h-8 w-8 opacity-50" />
+                          <p className="mt-3 font-serif text-sm italic">Your next note will appear on this page.</p>
+                          <span className="absolute bottom-4 right-5 font-serif text-[10px]">{bookPageIndex + 2}</span>
+                        </div>
+                      )}
+                      {notebookMode && notebookLayoutMode === 'advanced' && pageTurn && (
+                        <div
+                          aria-hidden="true"
+                          className={isNotebookFullscreen
+                            ? `pointer-events-none absolute inset-y-0 z-20 w-1/2 ${pageTurn.direction === 'next' ? 'right-0 rounded-r-2xl' : 'left-0 rounded-l-2xl'}`
+                            : `pointer-events-none absolute inset-y-3 z-20 w-[calc(50%-13px)] sm:inset-y-5 sm:w-[calc(50%-21px)] ${pageTurn.direction === 'next' ? 'right-3 rounded-r-2xl sm:right-5' : 'left-3 rounded-l-2xl sm:left-5'}`}
+                          style={{ perspective: '1800px' }}
+                        >
+                          <div
+                            className={`learn-page-turn-leaf ${pageTurn.direction === 'next' ? 'forward rounded-r-2xl' : 'backward rounded-l-2xl'} relative h-full w-full border border-[#c9b98f]`}
+                            onAnimationEnd={finishBookPageTurn}
+                          >
+                            <div
+                              className={`learn-page-turn-face absolute inset-0 overflow-hidden p-5 text-[#302a20] sm:p-8 ${pageTurn.direction === 'next' ? 'rounded-r-2xl' : 'rounded-l-2xl'}`}
+                              style={{ backgroundImage: 'linear-gradient(#f5ecd7, #eee1c2)' }}
+                            >
+                              {pageTurn.page.startsNote && (
+                                <>
+                                  <h2 className="break-words text-sm font-semibold">{pageTurn.page.note.title}</h2>
+                                  <time className="mt-1 block text-[10px] text-[#796b50]">{new Date(pageTurn.page.note.created_at).toLocaleString()}</time>
+                                  {pageTurn.page.note.source_name && <p className="relative mt-1 text-[10px] text-[#796b50]">Source: {pageTurn.page.note.source_name}</p>}
+                                </>
+                              )}
+                              <FormattedMarkdown content={pageTurn.page.content} terms={[]} paperTheme />
+                            </div>
+                            <div
+                              className={`learn-page-turn-face learn-page-turn-back absolute inset-0 border border-[#c9b98f] ${pageTurn.direction === 'next' ? 'rounded-l-2xl' : 'rounded-r-2xl'}`}
+                              style={{ backgroundImage: 'linear-gradient(#f5ecd7, #eee1c2)' }}
+                            >
+                              {turningPageBack && (
+                                <div className={`h-full overflow-hidden p-5 text-[#302a20] sm:p-8 ${pageTurn.direction === 'next' ? 'rounded-l-2xl' : 'rounded-r-2xl'}`}>
+                                  {turningPageBack.startsNote && (
+                                    <>
+                                      <h2 className="break-words text-sm font-semibold">{turningPageBack.note.title}</h2>
+                                      <time className="mt-1 block text-[10px] text-[#796b50]">{new Date(turningPageBack.note.created_at).toLocaleString()}</time>
+                                      {turningPageBack.note.source_name && <p className="relative mt-1 text-[10px] text-[#796b50]">Source: {turningPageBack.note.source_name}</p>}
+                                    </>
+                                  )}
+                                  <FormattedMarkdown content={turningPageBack.content} terms={turningPageBack.note.terms || []} paperTheme />
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      {notebookMode && (
+                        <>
+                          {notebookLayoutMode === 'advanced' && (
+                            <>
+                              <button
+                                type="button"
+                                aria-label="Previous pages"
+                                title="Previous pages"
+                                disabled={bookPageIndex === 0 || Boolean(pageTurn)}
+                                onClick={() => turnBookPage('previous')}
+                                className="absolute left-0 top-1/2 z-30 -translate-x-1/2 -translate-y-1/2 rounded-full border border-[#d8c89f] bg-[#332b1d] p-2.5 text-[#f0dfb8] shadow-lg transition hover:scale-110 hover:bg-[#4a3c27] disabled:pointer-events-none disabled:opacity-0 sm:p-3"
+                              >
+                                <ChevronLeft className="h-5 w-5" />
+                              </button>
+                              <button
+                                type="button"
+                                aria-label="Next pages"
+                                title="Next pages"
+                                disabled={bookPageIndex + 2 >= notebookPageCount || Boolean(pageTurn)}
+                                onClick={() => turnBookPage('next')}
+                                className="absolute right-0 top-1/2 z-30 translate-x-1/2 -translate-y-1/2 rounded-full border border-[#d8c89f] bg-[#332b1d] p-2.5 text-[#f0dfb8] shadow-lg transition hover:scale-110 hover:bg-[#4a3c27] disabled:pointer-events-none disabled:opacity-0 sm:p-3"
+                              >
+                                <ChevronRight className="h-5 w-5" />
+                              </button>
+                            </>
+                          )}
+                        </>
+                      )}
                     </div>
-                    <button type="button" onClick={() => { setDeleteNoteError(null); setNoteToDelete(note); }} aria-label={`Delete note ${note.title}`} title="Delete note" className="shrink-0 rounded-lg p-2 text-slate-500 hover:bg-red-500/10 hover:text-red-300 cursor-pointer">
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                  {note.source_name && <p className="mt-1 text-[10px] text-slate-500">Source: {note.source_name}</p>}
-                  <AnnotatedSummary content={note.content_text} terms={note.terms || []} visualHintsEnabled={visualHintsEnabled} />
-                </article>
-              ))}
+                    {notebookMode && notebookLayoutMode === 'advanced' && (
+                      <div className={isNotebookFullscreen ? 'fixed bottom-5 left-1/2 z-[90] -translate-x-1/2 rounded-full border border-[#d8c89f]/30 bg-[#332b1d]/95 px-4 py-2 shadow-lg' : 'flex items-center justify-center pt-2'}>
+                        <span className={`text-[11px] ${isNotebookFullscreen ? 'text-[#e6d6b2]' : 'text-slate-500'}`}>
+                          {`Pages ${bookPageIndex + 1}–${Math.min(bookPageIndex + 2, notebookPageCount)} of ${notebookPageCount}`}
+                        </span>
+                      </div>
+                    )}
+                    {isNotebookFullscreen && (
+                      <button
+                        type="button"
+                        onClick={() => setIsNotebookFullscreen(false)}
+                        aria-label="Close Learn fullscreen"
+                        title="Close fullscreen (Esc)"
+                        className="fixed right-5 top-5 z-[90] inline-flex items-center gap-2 rounded-lg border border-white/15 bg-[#171717]/95 px-3 py-2 text-xs font-medium text-slate-100 shadow-lg transition hover:bg-[#292929]"
+                      >
+                        <X className="h-4 w-4" /> Close
+                      </button>
+                    )}
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
-          </div>
 
           {isAskPanelOpen && activeSection && (
-            <aside className="absolute right-0 top-0 bottom-0 z-20 w-[min(360px,90vw)] shrink-0 border-l border-white/[0.08] bg-[#151515] flex flex-col min-h-0 sm:static sm:z-auto sm:w-[360px]">
+            <aside className={isNotebookFullscreen
+              ? 'fixed right-0 top-0 bottom-0 z-[85] w-[min(360px,90vw)] shrink-0 border-l border-white/[0.08] bg-[#151515] flex flex-col min-h-0'
+              : 'absolute right-0 top-0 bottom-0 z-20 w-[min(360px,90vw)] shrink-0 border-l border-white/[0.08] bg-[#151515] flex flex-col min-h-0 sm:static sm:z-auto sm:w-[360px]'}>
               <div className="flex items-center justify-between gap-2 border-b border-white/[0.08] px-4 py-3">
                 <div className="min-w-0">
                   <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-100"><MessageCircle className="h-4 w-4 text-emerald-400" /> Ask about this section</h2>
@@ -1028,11 +1490,61 @@ Return JSON only:
               </form>
             </aside>
           )}
+          {isSaving && (
+            <div className="absolute inset-0 z-30 flex items-center justify-center bg-[#101010]/85 px-5 backdrop-blur-sm" role="status" aria-live="polite">
+              <div className="w-full max-w-sm text-center">
+                <div className="relative mx-auto flex h-24 w-32 items-center justify-center">
+                  <div className="absolute left-4 top-4 h-16 w-12 -rotate-12 rounded-md border border-emerald-300/30 bg-[#17251d] shadow-lg animate-pulse" />
+                  <div className="absolute right-4 top-4 h-16 w-12 rotate-12 rounded-md border border-emerald-300/40 bg-[#1d3024] shadow-lg animate-pulse [animation-delay:180ms]" />
+                  <div className="relative z-10 flex h-20 w-16 items-center justify-center rounded-md border border-emerald-300/50 bg-[#20392a] shadow-[0_0_35px_rgba(52,211,153,0.18)]">
+                    <BookOpen className="h-8 w-8 text-emerald-300 animate-pulse" />
+                  </div>
+                  <Loader2 className="absolute -right-1 top-0 h-5 w-5 animate-spin text-emerald-300" />
+                </div>
+                <h2 className="mt-5 text-base font-semibold text-white">Preparing your study notes</h2>
+                <p className="mt-2 min-h-5 text-sm text-emerald-200 transition-all">{loadingSteps[analysisStep]}</p>
+                <div className="mx-auto mt-4 h-1.5 w-48 overflow-hidden rounded-full bg-white/10">
+                  <div className="h-full w-1/2 rounded-full bg-emerald-400 animate-[learn-progress_1.6s_ease-in-out_infinite_alternate]" />
+                </div>
+                <style>{`@keyframes learn-progress { from { transform: translateX(-55%); } to { transform: translateX(155%); } } @media (prefers-reduced-motion: reduce) { .animate-\\[learn-progress_1\\.6s_ease-in-out_infinite_alternate\\] { animation: none; } }`}</style>
+                <p className="mt-3 text-[11px] text-slate-500">Reviewing the slides, selecting key ideas, and shaping a clear summary.</p>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="shrink-0 border-t border-white/[0.08] bg-[#141414] px-3 sm:px-6 pt-3 pb-4">
           <div className={`w-full ${isAskPanelOpen ? 'sm:w-[calc(100%-360px)]' : ''}`}>
             <div className="max-w-3xl mx-auto">
+            {composerCollapsed ? (
+              <div className="flex items-center justify-between gap-3">
+                <span className="truncate text-[11px] text-slate-500">
+                  {attachedFiles.length > 0 ? `${attachedFiles.length} attachment${attachedFiles.length === 1 ? '' : 's'} ready` : 'Prompt area minimized'}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setComposerCollapsed(false)}
+                  aria-label="Expand prompt area"
+                  title="Expand prompt area"
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1.5 text-[11px] text-slate-300 hover:bg-white/[0.08] cursor-pointer"
+                >
+                  <Maximize2 className="h-3.5 w-3.5" /> Expand
+                </button>
+              </div>
+            ) : (
+              <>
+            <div className="mb-2 flex items-center justify-end">
+              <button
+                type="button"
+                onClick={() => setComposerCollapsed(true)}
+                aria-label="Minimize prompt area"
+                title="Minimize prompt area"
+                disabled={isSaving}
+                className="rounded-md p-1 text-slate-500 hover:bg-white/[0.06] hover:text-slate-200 disabled:opacity-40 cursor-pointer"
+              >
+                <Minus className="h-4 w-4" />
+              </button>
+            </div>
             {attachedFiles.length > 0 && (
               <div className="flex flex-wrap gap-2 mb-2">
                 {attachedFiles.map((file, index) => (
@@ -1103,6 +1615,8 @@ Return JSON only:
               </button>
             </div>
             {status && <p className={`mt-2 text-[11px] ${status.startsWith('Could not') || status.startsWith('Not saved') || status.startsWith('Add your') ? 'text-amber-300' : 'text-slate-500'}`}>{status}</p>}
+              </>
+            )}
             </div>
           </div>
         </div>
