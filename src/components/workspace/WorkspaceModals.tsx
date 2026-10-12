@@ -10,6 +10,26 @@ import type { AttachedFile, FlaggedMaterial, StudyYear, TestHistoryItem, Questio
 import { getGeminiModelUsage } from '../../lib/gemini';
 import { FileDropzone, ApiKeyTooltip } from '../common/LayoutComponents';
 
+export interface QuizPresetSettings {
+  quizCustomTitle: string;
+  quizQuestionCount: number;
+  quizCustomCount: string;
+  quizTimerMinutes: number;
+  quizCustomTimer: string;
+  quizScoringMode: 'partial' | 'strict' | 'negative';
+  immediateQuizFeedback: boolean;
+  quizTypePercentages: { mcq: number; text: number; single: number };
+  quizThinkingMode: boolean;
+  selectedTag: string;
+  quizPrompt: string;
+}
+
+export interface QuizPreset {
+  id: string;
+  name: string;
+  settings: QuizPresetSettings;
+}
+
 /* ==========================================================================
    COMPONENT: SEARCHABLE TAG DROPDOWN
    ========================================================================== */
@@ -17,8 +37,7 @@ export const SearchableTagDropdown: React.FC<{
   selectedTag: string;
   onSelectTag: (tag: string) => void;
   availableTags: string[];
-  onAddNewTag: (tag: string) => void;
-}> = ({ selectedTag, onSelectTag, availableTags, onAddNewTag }) => {
+}> = ({ selectedTag, onSelectTag, availableTags }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
   const dropdownRef = useRef<HTMLDivElement | null>(null);
@@ -38,15 +57,6 @@ export const SearchableTagDropdown: React.FC<{
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
-
-  const handleCreate = () => {
-    if (!search.trim()) return;
-    const formatted = '#' + search.trim().replace(/^#+/, '').replace(/\s+/g, '_');
-    onAddNewTag(formatted);
-    onSelectTag(formatted);
-    setSearch('');
-    setIsOpen(false);
-  };
 
   return (
     <div className="relative w-full text-left" ref={dropdownRef}>
@@ -92,16 +102,7 @@ export const SearchableTagDropdown: React.FC<{
           <div className="max-h-48 overflow-y-auto space-y-1 pr-1">
             {filteredTags.length === 0 ? (
               <div className="py-2 px-1 text-center space-y-1.5">
-                <span className="text-[11px] text-slate-400 block">No matching tags found</span>
-                {search.trim() && (
-                  <button
-                    type="button"
-                    onClick={handleCreate}
-                    className="w-full py-1.5 px-2 rounded-lg bg-[#3ccb57]/15 hover:bg-[#3ccb57]/25 text-[#3ccb57] text-[11px] font-bold border border-[#3ccb57]/30 transition-all cursor-pointer"
-                  >
-                    + Create & Select "#{search.replace(/^#+/, '').replace(/\s+/g, '_')}"
-                  </button>
-                )}
+                <span className="text-[11px] text-slate-400 block">{search.trim() ? 'No matching tags. Clear the search and leave the tag empty to let AI classify this material.' : 'No approved curriculum tags yet. Leave empty and AI will classify this material.'}</span>
               </div>
             ) : (
               filteredTags.map((tag) => {
@@ -147,16 +148,25 @@ export const QuizModal: React.FC<{
   setQuizTimerMinutes: (n: number) => void;
   quizCustomTimer: string;
   setQuizCustomTimer: (s: string) => void;
-  quizScoringMode: 'partial' | 'strict';
-  setQuizScoringMode: (m: 'partial' | 'strict') => void;
-  quizTypes: { mcq: boolean; text: boolean; single: boolean };
-  setQuizTypes: React.Dispatch<React.SetStateAction<{ mcq: boolean; text: boolean; single: boolean }>>;
+  quizScoringMode: 'partial' | 'strict' | 'negative';
+  setQuizScoringMode: (m: 'partial' | 'strict' | 'negative') => void;
+  immediateQuizFeedback: boolean;
+  setImmediateQuizFeedback: (enabled: boolean) => void;
+  quizTypePercentages: { mcq: number; text: number; single: number };
+  setQuizTypePercentages: React.Dispatch<React.SetStateAction<{ mcq: number; text: number; single: number }>>;
+  quizPresets: QuizPreset[];
+  selectedQuizPresetId: string | null;
+  quizPresetError: string | null;
+  onCreateQuizPreset: () => void;
+  onApplyQuizPreset: (presetId: string) => void;
+  onSaveQuizPreset: () => void;
+  onRenameQuizPreset: (presetId: string, name: string) => void;
+  onDeleteQuizPreset: (presetId: string) => void;
   quizThinkingMode: boolean;
   setQuizThinkingMode: (b: boolean) => void;
   selectedTag: string;
   setSelectedTag: (t: string) => void;
   availableTags: string[];
-  onAddNewTag: (t: string) => void;
   quizAttachedFiles: AttachedFile[];
   setQuizAttachedFiles: React.Dispatch<React.SetStateAction<AttachedFile[]>>;
   quizPrompt: string;
@@ -167,8 +177,9 @@ export const QuizModal: React.FC<{
 }> = ({
   isOpen, onClose, quizCustomTitle, setQuizCustomTitle, quizQuestionCount, setQuizQuestionCount,
   quizCustomCount, setQuizCustomCount, quizTimerMinutes, setQuizTimerMinutes, quizCustomTimer, setQuizCustomTimer,
-  quizScoringMode, setQuizScoringMode, quizTypes, setQuizTypes, quizThinkingMode, setQuizThinkingMode,
-  selectedTag, setSelectedTag, availableTags, onAddNewTag, quizAttachedFiles, setQuizAttachedFiles,
+  quizScoringMode, setQuizScoringMode, immediateQuizFeedback, setImmediateQuizFeedback, quizTypePercentages, setQuizTypePercentages, quizThinkingMode, setQuizThinkingMode,
+  quizPresets, selectedQuizPresetId, quizPresetError, onCreateQuizPreset, onApplyQuizPreset, onSaveQuizPreset, onRenameQuizPreset, onDeleteQuizPreset,
+  selectedTag, setSelectedTag, availableTags, quizAttachedFiles, setQuizAttachedFiles,
   quizPrompt, setQuizPrompt, isGenerating, generationError, onLaunch
 }) => {
   if (!isOpen) return null;
@@ -182,6 +193,78 @@ export const QuizModal: React.FC<{
           </h3>
           <button onClick={onClose} className="text-slate-400 hover:text-white p-1 cursor-pointer"><X className="h-5 w-5" /></button>
         </div>
+
+        <section className="rounded-xl border border-white/10 bg-black/20 p-3.5 sm:p-4" aria-label="Quiz presets">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h4 className="text-xs font-bold text-white">Quiz Presets</h4>
+              <p className="mt-1 text-[10px] text-slate-400">Save and reuse all quiz settings and prompt. Attached files are not included.</p>
+            </div>
+            <button
+              type="button"
+              onClick={onCreateQuizPreset}
+              disabled={quizPresets.length >= 5}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[#3ccb57]/30 bg-[#3ccb57]/10 px-3 py-2 text-[11px] font-semibold text-[#7bea91] transition hover:bg-[#3ccb57]/20 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Plus className="h-3.5 w-3.5" /> Save current as preset
+            </button>
+          </div>
+          {quizPresetError && <p role="alert" className="mb-2 text-[10px] text-amber-300">{quizPresetError}</p>}
+          {quizPresets.length > 0 ? (
+            <div className="space-y-2">
+              {quizPresets.map((preset) => (
+                <div
+                  key={preset.id}
+                  className={`grid grid-cols-1 gap-2 rounded-lg border p-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center ${
+                    selectedQuizPresetId === preset.id ? 'border-[#3ccb57]/40 bg-[#3ccb57]/[0.06]' : 'border-white/5 bg-white/[0.02]'
+                  }`}
+                >
+                  <div className="flex min-w-0 items-center gap-2">
+                    <input
+                      type="text"
+                      value={preset.name}
+                      maxLength={40}
+                      aria-label="Preset name"
+                      onChange={(event) => onRenameQuizPreset(preset.id, event.target.value)}
+                      onBlur={() => {
+                        if (!preset.name.trim()) onRenameQuizPreset(preset.id, 'Quiz Preset');
+                      }}
+                      className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/40 px-2.5 py-2 text-xs text-white focus:border-[#3ccb57] focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => onApplyQuizPreset(preset.id)}
+                      className="shrink-0 rounded-lg border border-white/10 px-3 py-2 text-[10px] font-semibold text-slate-200 transition hover:bg-white/10"
+                    >
+                      Apply
+                    </button>
+                  </div>
+                  <div className="flex items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={onSaveQuizPreset}
+                      disabled={selectedQuizPresetId !== preset.id}
+                      className="rounded-lg border border-[#3ccb57]/25 px-3 py-2 text-[10px] font-semibold text-[#7bea91] transition hover:bg-[#3ccb57]/10 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      Save settings
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onDeleteQuizPreset(preset.id)}
+                      aria-label={`Delete ${preset.name || 'quiz preset'}`}
+                      className="inline-flex items-center justify-center rounded-lg border border-red-500/20 p-2 text-red-300 transition hover:bg-red-500/10"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="rounded-lg border border-dashed border-white/10 px-3 py-4 text-center text-[10px] text-slate-500">No saved presets yet. Save the current configuration to create one.</p>
+          )}
+          <p className="mt-2 text-right text-[10px] text-slate-500">{quizPresets.length}/5 presets</p>
+        </section>
 
         {generationError && (
           <div className="p-3.5 rounded-xl bg-red-950/40 border border-red-500/30 text-xs text-red-200 flex items-start gap-2">
@@ -264,6 +347,19 @@ export const QuizModal: React.FC<{
           </div>
         </div>
 
+        <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-black/30 p-3.5 transition hover:border-white/20">
+          <input
+            type="checkbox"
+            checked={immediateQuizFeedback}
+            onChange={(event) => setImmediateQuizFeedback(event.target.checked)}
+            className="mt-0.5 accent-[#3ccb57]"
+          />
+          <span>
+            <span className="block text-xs font-bold text-white">Show feedback after each answer</span>
+            <span className="mt-1 block text-[11px] leading-5 text-slate-400">Lock each answer when submitted, then show the correct answer and explanation. Leave off to review results at the end.</span>
+          </span>
+        </label>
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           <div>
             <label className="block text-xs font-semibold text-slate-300 mb-2">Scoring Mode</label>
@@ -293,25 +389,59 @@ export const QuizModal: React.FC<{
                   <span className="text-[11px] text-slate-400">1 correct + 1 wrong = 0 points</span>
                 </div>
               </label>
+
+              <label
+                onClick={() => setQuizScoringMode('negative')}
+                className={`p-3 rounded-xl border flex items-start gap-2.5 cursor-pointer transition-all ${
+                  quizScoringMode === 'negative' ? 'border-[#3ccb57] bg-[#3ccb57]/10 text-white' : 'border-white/10 bg-black/30 text-slate-400'
+                }`}
+              >
+                <input type="radio" checked={quizScoringMode === 'negative'} readOnly className="mt-0.5" />
+                <div>
+                  <span className="text-xs font-bold block text-white">Negative Marking</span>
+                  <span className="text-[11px] text-slate-400">Each missed correct or checked wrong option deducts 2/N of the question; unanswered questions score 0.</span>
+                </div>
+              </label>
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-2">Question Types</label>
-            <div className="space-y-2">
-              <label onClick={() => setQuizTypes((p) => ({ ...p, mcq: !p.mcq }))} className="p-2.5 rounded-xl border border-white/10 bg-black/30 flex items-center gap-2.5 text-xs text-slate-300 cursor-pointer">
-                <input type="checkbox" checked={quizTypes.mcq} readOnly />
-                <span>Multiple Choice (Multiple Correct)</span>
-              </label>
-              <label onClick={() => setQuizTypes((p) => ({ ...p, single: !p.single }))} className="p-2.5 rounded-xl border border-white/10 bg-black/30 flex items-center gap-2.5 text-xs text-slate-300 cursor-pointer">
-                <input type="checkbox" checked={quizTypes.single} readOnly />
-                <span>Single Choice Only</span>
-              </label>
-              <label onClick={() => setQuizTypes((p) => ({ ...p, text: !p.text }))} className="p-2.5 rounded-xl border border-white/10 bg-black/30 flex items-center gap-2.5 text-xs text-slate-300 cursor-pointer">
-                <input type="checkbox" checked={quizTypes.text} readOnly />
-                <span>Fill-in / Open Text Answers</span>
-              </label>
+            <label className="block text-xs font-semibold text-slate-300 mb-1">Question Type Percentages</label>
+            <p className="text-[10px] text-slate-500 mb-2">Set a whole-number percentage for each type. The total must equal 100%; counts are rounded to the nearest possible mix. Multiple Choice questions have 4–10 options.</p>
+            <div className="grid grid-cols-3 gap-2">
+              {([
+                ['mcq', 'Multiple Choice'],
+                ['text', 'Fill In'],
+                ['single', 'Single Answer'],
+              ] as const).map(([type, label]) => (
+                <label key={type} className="min-w-0 rounded-xl border border-white/10 bg-black/30 p-2.5">
+                  <span className="mb-1.5 block truncate text-[10px] font-semibold text-slate-300">{label}</span>
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="1"
+                      value={quizTypePercentages[type]}
+                      onChange={(event) => {
+                        const value = Number.parseInt(event.target.value, 10);
+                        setQuizTypePercentages((previous) => ({
+                          ...previous,
+                          [type]: Number.isNaN(value) ? 0 : Math.max(0, Math.min(100, value)),
+                        }));
+                      }}
+                      aria-label={`${label} percentage`}
+                      className="w-full min-w-0 rounded-lg border border-white/10 bg-black/50 px-2 py-1.5 text-xs text-white focus:border-[#3ccb57] focus:outline-none"
+                    />
+                    <span className="text-xs text-slate-400">%</span>
+                  </div>
+                </label>
+              ))}
             </div>
+            <p className={`mt-2 text-[10px] font-semibold ${quizTypePercentages.mcq + quizTypePercentages.text + quizTypePercentages.single === 100 ? 'text-emerald-400' : 'text-amber-300'}`}>
+              Total: {quizTypePercentages.mcq + quizTypePercentages.text + quizTypePercentages.single}%
+              {quizTypePercentages.mcq + quizTypePercentages.text + quizTypePercentages.single !== 100 && ' — must equal 100%'}
+            </p>
           </div>
         </div>
 
@@ -335,13 +465,13 @@ export const QuizModal: React.FC<{
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-slate-300 mb-1.5">Curriculum Tag (Searchable)</label>
+          <label className="block text-xs font-semibold text-slate-300 mb-1.5">Curriculum Tag (Optional)</label>
           <SearchableTagDropdown
             selectedTag={selectedTag}
             onSelectTag={setSelectedTag}
             availableTags={availableTags}
-            onAddNewTag={onAddNewTag}
           />
+          <p className="mt-1.5 text-[10px] text-slate-500">AI checks the tag against your material and may reuse or assign a more relevant tag.</p>
         </div>
 
         <FileDropzone
@@ -391,14 +521,13 @@ export const ProgrammingModal: React.FC<{
   selectedTag: string;
   setSelectedTag: (t: string) => void;
   availableTags: string[];
-  onAddNewTag: (t: string) => void;
   progAttachedFiles: AttachedFile[];
   setProgAttachedFiles: React.Dispatch<React.SetStateAction<AttachedFile[]>>;
   progPrompt: string;
   setProgPrompt: (s: string) => void;
   isGenerating: boolean;
   onLaunch: () => void;
-}> = ({ isOpen, onClose, progCustomTitle, setProgCustomTitle, progDifficulty, setProgDifficulty, selectedTag, setSelectedTag, availableTags, onAddNewTag, progAttachedFiles, setProgAttachedFiles, progPrompt, setProgPrompt, isGenerating, onLaunch }) => {
+}> = ({ isOpen, onClose, progCustomTitle, setProgCustomTitle, progDifficulty, setProgDifficulty, selectedTag, setSelectedTag, availableTags, progAttachedFiles, setProgAttachedFiles, progPrompt, setProgPrompt, isGenerating, onLaunch }) => {
   if (!isOpen) return null;
 
   return (
@@ -442,13 +571,13 @@ export const ProgrammingModal: React.FC<{
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-slate-300 mb-1.5">Target Curriculum Tag</label>
+          <label className="block text-xs font-semibold text-slate-300 mb-1.5">Curriculum Tag (Optional)</label>
           <SearchableTagDropdown
             selectedTag={selectedTag}
             onSelectTag={setSelectedTag}
             availableTags={availableTags}
-            onAddNewTag={onAddNewTag}
           />
+          <p className="mt-1.5 text-[10px] text-slate-500">AI checks the tag against your material and may reuse or assign a more relevant tag.</p>
         </div>
 
         <FileDropzone
@@ -498,14 +627,13 @@ export const AnalysisModal: React.FC<{
   selectedTag: string;
   setSelectedTag: (t: string) => void;
   availableTags: string[];
-  onAddNewTag: (t: string) => void;
   analysisAttachedFiles: AttachedFile[];
   setAnalysisAttachedFiles: React.Dispatch<React.SetStateAction<AttachedFile[]>>;
   analysisPrompt: string;
   setAnalysisPrompt: (s: string) => void;
   isGenerating: boolean;
   onLaunch: () => void;
-}> = ({ isOpen, onClose, analysisCustomTitle, setAnalysisCustomTitle, analysisDifficulty, setAnalysisDifficulty, selectedTag, setSelectedTag, availableTags, onAddNewTag, analysisAttachedFiles, setAnalysisAttachedFiles, analysisPrompt, setAnalysisPrompt, isGenerating, onLaunch }) => {
+}> = ({ isOpen, onClose, analysisCustomTitle, setAnalysisCustomTitle, analysisDifficulty, setAnalysisDifficulty, selectedTag, setSelectedTag, availableTags, analysisAttachedFiles, setAnalysisAttachedFiles, analysisPrompt, setAnalysisPrompt, isGenerating, onLaunch }) => {
   if (!isOpen) return null;
 
   return (
@@ -549,13 +677,13 @@ export const AnalysisModal: React.FC<{
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-slate-300 mb-1.5">Target Curriculum Tag</label>
+          <label className="block text-xs font-semibold text-slate-300 mb-1.5">Curriculum Tag (Optional)</label>
           <SearchableTagDropdown
             selectedTag={selectedTag}
             onSelectTag={setSelectedTag}
             availableTags={availableTags}
-            onAddNewTag={onAddNewTag}
           />
+          <p className="mt-1.5 text-[10px] text-slate-500">AI checks the tag against your material and may reuse or assign a more relevant tag.</p>
         </div>
 
         <FileDropzone

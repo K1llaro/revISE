@@ -1,9 +1,14 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { BookOpen, Check, ChevronDown, ChevronLeft, ChevronRight, Eye, EyeOff, FilePlus2, FolderPlus, Loader2, Maximize2, MessageCircle, Minus, Paperclip, Pencil, Plus, Send, Trash2, X } from 'lucide-react';
+import { BookOpen, Check, ChevronDown, ChevronLeft, ChevronRight, Eye, EyeOff, FilePlus2, FolderPlus, Loader2, Maximize2, MessageCircle, Minus, Paperclip, Pencil, Plus, RefreshCw, Send, Trash2, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import type { AttachedFile, UserSession } from '../../types/ise';
 import { callGemini, readFileForGemini } from '../../lib/gemini';
+import {
+  hasStandardLearnSummaryFormat,
+  LEARN_SUMMARY_REFORMAT_PROMPT,
+  LEARN_SUMMARY_TEMPLATE_INSTRUCTIONS,
+} from '../../lib/learnSummaryFormat';
 
 interface LearnCategory {
   id: string;
@@ -45,8 +50,8 @@ const SUMMARY_MODES = [
   { id: 'very_short', label: 'Very Short Summary', maxCharacters: 700, guidance: 'Keep only the essential takeaway and a few critical facts.' },
   { id: 'short', label: 'Short Summary', maxCharacters: 2000, guidance: 'Condense the material to its main ideas, key definitions, essential steps, and the most useful examples. Still cover every major section and the ending slides.' },
   { id: 'standard', label: 'Standard Summary', maxCharacters: 5000, guidance: 'Give a thorough study-ready explanation of every important idea, definition, process, relationship, formula, and example. Explain how and why things work, include key details from each section, and do not skip the final slides. This mode should be meaningfully detailed, not a brief overview.' },
-  { id: 'expanded', label: 'Expanded Summary (Recommended)', maxCharacters: 7000, guidance: 'Explain the important ideas, definitions, relationships, mechanisms, steps, formulas, and representative examples from every section and slide in clear structured notes.' },
-  { id: 'detailed', label: 'Detailed Summary', maxCharacters: 12000, guidance: 'Follow the source closely: cover every slide and section in order, preserving meaningful facts, definitions, mechanisms, steps, formulas, examples, and qualifications. Remove repetition, filler, and irrelevant information.' },
+  { id: 'expanded', label: 'Expanded Summary (Recommended)', maxCharacters: 10000, guidance: 'Write like a careful student making useful exam notes, not like a generic essay or a compressed slide transcript. Use a clear hierarchy of headings and compact, complete bullet points. Cover every slide/section in source order. Preserve exact examinable details: dates and years, capacities and units, numerical values, names, model/version identifiers, limits, classifications, formulas, examples, comparisons, and stated advantages/disadvantages. Explain important mechanisms as understandable cause-and-effect steps so the reader can reconstruct how they work. Keep each fact with its context and exact source slide heading; do not merge distinct facts into vague generalizations. Ignore practical activities assigned for students to perform in class, including worksheet/lab tasks, discussion prompts, group activities, and submission instructions. Keep worked examples that explain a concept or establish an examinable fact. Remove repetition, filler, decorative wording, and irrelevant material.' },
+  { id: 'detailed', label: 'Detailed Summary', maxCharacters: 14000, guidance: 'Write thorough, exam-ready student notes, not a generic essay or a compressed slide transcript. Follow every slide and section in source order with clear headings and compact, complete bullet points. Preserve precise facts and their context: dates and years, capacities and units, numerical values, names, model/version identifiers, limits, classifications, formulas, examples, comparisons, qualifications, advantages, and disadvantages. Explain mechanisms as cause-and-effect steps, including enough detail to understand and reproduce how they work. Keep slide-specific facts under the exact source heading; never invent missing values or replace precise facts with vague statements. Ignore practical activities assigned for students to perform in class, including worksheet/lab tasks, discussion prompts, group activities, and submission instructions. Keep worked examples that explain a concept or establish an examinable fact. Remove repetition, filler, decorative wording, and irrelevant material.' },
 ] as const;
 
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -197,7 +202,7 @@ const renderInlineText = (text: string, terms: NoteTerm[], onTermHover?: (term: 
   return normalizeInlineMath(text).split(matcher).map((part, index) => {
     const term = termLookup.get(part.toLocaleLowerCase());
     if (term) {
-      return <span key={`${part}-${index}`} className="text-emerald-400 underline decoration-emerald-500/40 decoration-dotted underline-offset-4 cursor-help" title={`${term.explanation}${term.example ? ` Example: ${term.example}` : ''}`} onMouseEnter={(event) => onTermHover?.(term, event.clientX, event.clientY)} onMouseMove={(event) => onTermHover?.(term, event.clientX, event.clientY)} onMouseLeave={onTermLeave}>{part}</span>;
+      return <span key={`${part}-${index}`} className="text-emerald-400 underline decoration-emerald-500/40 decoration-dotted underline-offset-4 cursor-help" onMouseEnter={(event) => onTermHover?.(term, event.clientX, event.clientY)} onMouseLeave={onTermLeave}>{part}</span>;
     }
     if ((part.startsWith('**') && part.endsWith('**')) || (part.startsWith('__') && part.endsWith('__'))) {
       return <strong key={`${part}-${index}`} className={`font-semibold ${paperTheme ? 'text-[#282319]' : 'text-slate-100'}`}>{renderInlineText(part.slice(2, -2), terms, onTermHover, onTermLeave, paperTheme)}</strong>;
@@ -290,19 +295,31 @@ const FormattedMarkdown: React.FC<{
 
 const AnnotatedSummary: React.FC<{ content: string; terms: NoteTerm[]; visualHintsEnabled: boolean; paperTheme?: boolean }> = ({ content, terms, visualHintsEnabled, paperTheme = false }) => {
   const [hoveredTerm, setHoveredTerm] = useState<{ term: NoteTerm; x: number; y: number } | null>(null);
+  const tooltipDismissTimer = useRef<number | null>(null);
   const orderedTerms = visualHintsEnabled
     ? getVisibleTerms(content, terms).filter((term) => term.term.trim() && term.explanation.trim()).sort((a, b) => b.term.length - a.term.length)
     : [];
+  const tooltipWidth = Math.min(320, typeof window === 'undefined' ? 320 : window.innerWidth - 24);
+  const tooltipHeight = typeof window === 'undefined' ? 420 : Math.min(420, window.innerHeight * 0.7);
   const tooltipPosition = hoveredTerm
     ? {
-        left: Math.max(12, Math.min(hoveredTerm.x + 12, window.innerWidth - 310)),
-        top: Math.max(12, Math.min(hoveredTerm.y + 16, window.innerHeight - 170)),
+        left: Math.max(12, Math.min(hoveredTerm.x + 12, window.innerWidth - tooltipWidth - 12)),
+        top: Math.max(12, Math.min(hoveredTerm.y + 16, window.innerHeight - tooltipHeight - 12)),
       }
     : undefined;
+
+  const dismissTooltipSoon = () => {
+    if (tooltipDismissTimer.current !== null) window.clearTimeout(tooltipDismissTimer.current);
+    tooltipDismissTimer.current = window.setTimeout(() => setHoveredTerm(null), 450);
+  };
 
   useEffect(() => {
     if (!visualHintsEnabled) setHoveredTerm(null);
   }, [visualHintsEnabled]);
+
+  useEffect(() => () => {
+    if (tooltipDismissTimer.current !== null) window.clearTimeout(tooltipDismissTimer.current);
+  }, []);
 
   return (
     <>
@@ -310,14 +327,21 @@ const AnnotatedSummary: React.FC<{ content: string; terms: NoteTerm[]; visualHin
         content={content}
         terms={orderedTerms}
         paperTheme={paperTheme}
-        onTermHover={(term, x, y) => setHoveredTerm({ term, x, y })}
-        onTermLeave={() => setHoveredTerm(null)}
+        onTermHover={(term, x, y) => {
+          if (tooltipDismissTimer.current !== null) window.clearTimeout(tooltipDismissTimer.current);
+          setHoveredTerm((current) => current?.term.term === term.term ? current : { term, x, y });
+        }}
+        onTermLeave={dismissTooltipSoon}
       />
       {hoveredTerm && tooltipPosition && typeof document !== 'undefined' && createPortal(
         <div
           role="tooltip"
           style={tooltipPosition}
-          className="fixed z-[100] w-72 max-w-[calc(100vw-24px)] rounded-xl border border-emerald-400/30 bg-[#101714] p-3 shadow-2xl pointer-events-none"
+          onMouseEnter={() => {
+            if (tooltipDismissTimer.current !== null) window.clearTimeout(tooltipDismissTimer.current);
+          }}
+          onMouseLeave={dismissTooltipSoon}
+          className="fixed z-[100] w-80 max-w-[calc(100vw-24px)] max-h-[min(70vh,420px)] overflow-y-auto overscroll-contain rounded-xl border border-emerald-400/30 bg-[#101714] p-3 shadow-2xl"
         >
           <strong className="block text-xs font-bold text-emerald-300">{hoveredTerm.term.term}</strong>
           <p className="mt-1 text-xs leading-relaxed text-slate-200">{hoveredTerm.term.explanation}</p>
@@ -418,6 +442,7 @@ export const LearnWorkspace: React.FC<{
   const [noteToDelete, setNoteToDelete] = useState<LearnNote | null>(null);
   const [isDeletingNote, setIsDeletingNote] = useState(false);
   const [deleteNoteError, setDeleteNoteError] = useState<string | null>(null);
+  const [isRegeneratingNoteId, setIsRegeneratingNoteId] = useState<string | null>(null);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
   const [categoryName, setCategoryName] = useState('');
@@ -705,6 +730,81 @@ export const LearnWorkspace: React.FC<{
     setIsDeletingNote(false);
   };
 
+  const regenerateNote = async (note: LearnNote) => {
+    const key = user.apiKey || localStorage.getItem('gemini_api_key');
+    if (!key) {
+      setStatus('Add your Gemini API key in Settings to regenerate Learn notes.');
+      return;
+    }
+    setIsRegeneratingNoteId(note.id);
+    setStatus(`Regenerating "${note.title}" from its saved notebook text…`);
+    try {
+      const result = await callGemini(key, [{
+        text: `You are revising an existing student's Computer Science study note. Regenerate it as clear, accurate, exam-ready Markdown using only the saved note below as source material. Preserve all useful facts, definitions, examples, values, qualifications, and source headings; improve clarity and organization without inventing or silently dropping examinable content.
+
+Title: ${note.title}
+Original source name: ${note.source_name || 'Pasted study notes'}
+Existing saved note (the source of truth; do not exceed 18,000 characters in cleanSummary):
+"""
+${note.content_text.slice(0, 18000)}
+"""
+
+${LEARN_SUMMARY_TEMPLATE_INSTRUCTIONS}
+
+After writing the note, identify up to 40 specialist technical terms that appear exactly in the new summary and are not explained there. Explain each in plain language without cutting off a sentence; keep explanations under 240 characters. Include analogy, example, and why-it-matters only when useful, with each optional field under 240 characters.
+
+Return JSON only:
+{"title":"short note title","cleanSummary":"complete regenerated Markdown study note","terms":[{"term":"exact term in cleanSummary","explanation":"plain-language meaning","analogy":"short analogy or empty string","example":"short example or empty string","whyItMatters":"plain-language purpose or empty string"}]}`,
+      }], false, 12000);
+
+      let summary = typeof result.cleanSummary === 'string' ? result.cleanSummary.trim() : '';
+      if (!summary) throw new Error('The AI returned an empty regenerated note.');
+      if (!hasStandardLearnSummaryFormat(summary)) {
+        const formatted = await callGemini(key, [LEARN_SUMMARY_REFORMAT_PROMPT(note.title, summary)], false, 12000);
+        summary = typeof formatted.cleanSummary === 'string' ? formatted.cleanSummary.trim() : '';
+      }
+      if (!summary || !hasStandardLearnSummaryFormat(summary)) {
+        throw new Error('The AI could not format the regenerated note into the required notebook template. The existing note was left unchanged; please retry.');
+      }
+      if (summary.length > 18000) throw new Error('The regenerated note exceeded the 18,000-character note limit. The existing note was left unchanged.');
+      const normalizedTerms: NoteTerm[] = Array.isArray(result.terms)
+        ? result.terms
+          .filter((item: Partial<NoteTerm>) =>
+            typeof item.term === 'string'
+            && item.term.trim().length > 0
+            && typeof item.explanation === 'string'
+            && item.explanation.trim().length > 0
+            && summary.toLocaleLowerCase().includes(item.term.trim().toLocaleLowerCase())
+          )
+          .slice(0, 40)
+          .map((item: Partial<NoteTerm>) => ({
+            term: item.term!.trim().slice(0, 60),
+            explanation: item.explanation!.trim().slice(0, 240),
+            analogy: typeof item.analogy === 'string' ? item.analogy.trim().slice(0, 240) : undefined,
+            example: typeof item.example === 'string' ? item.example.trim().slice(0, 240) : undefined,
+            whyItMatters: typeof item.whyItMatters === 'string' ? item.whyItMatters.trim().slice(0, 240) : undefined,
+          }))
+        : [];
+      const title = typeof result.title === 'string' && result.title.trim()
+        ? result.title.trim().slice(0, 160)
+        : note.title;
+      const { data, error } = await supabase
+        .from('learn_notes')
+        .update({ title, content_text: summary, terms: normalizedTerms })
+        .eq('id', note.id)
+        .eq('user_id', user.id)
+        .select('id, title, content_text, source_name, created_at, terms')
+        .single();
+      if (error) throw error;
+      setNotes((current) => current.map((item) => item.id === note.id ? data as LearnNote : item));
+      setStatus(`Regenerated "${title}" from the saved note. Original files are not retained in Learn.`);
+    } catch (error) {
+      setStatus(`Could not regenerate note: ${getSupabaseErrorMessage(error)}`);
+    } finally {
+      setIsRegeneratingNoteId(null);
+    }
+  };
+
   const openAskForSelection = () => {
     const selection = window.getSelection();
     const text = selection?.toString().trim() || '';
@@ -759,8 +859,38 @@ export const LearnWorkspace: React.FC<{
     setIsAsking(true);
     setStatus(null);
     try {
-      const noteContext = notes.map((note) => `${note.title}\n${note.content_text}`).join('\n\n').slice(0, 12000);
-      const result = await callGemini(key, `Answer a student's question about their private study notes. Use only the supplied note context and selected passage; state clearly if the notes do not provide enough information. Format the answer in concise Markdown. Return JSON only as {"answer":"..."}.\n\nSection: ${activeSection?.name || 'Study notes'}\nSelected passage:\n"""${selectedText}"""\n\nQuestion: ${question}\n\nStudy notes:\n"""${noteContext}"""`, false);
+      const selectedNote = notes.find((note) => note.content_text.includes(selectedText));
+      const orderedNotes = selectedNote
+        ? [selectedNote, ...notes.filter((note) => note.id !== selectedNote.id)]
+        : notes;
+      const noteContext = orderedNotes
+        .map((note) => `${note.title}\n${note.content_text}`)
+        .join('\n\n')
+        .slice(0, 12000);
+      const glossaryContext = (selectedNote?.terms || [])
+        .map((term) => `${term.term}: ${term.explanation}${term.example ? ` Example: ${term.example}` : ''}`)
+        .join('\n')
+        .slice(0, 5000);
+      const subjectName = categories.find((category) => category.id === selectedCategoryId)?.name || 'Study notes';
+      const sectionName = sections.find((section) => section.id === selectedSectionId)?.name || 'General';
+      const result = await callGemini(key, `You are a careful subject tutor answering a student's question about course material.
+Use the selected passage and Learn notes (summaries of the student's uploaded slides) as the primary source. Check them first and accurately explain anything they say. You may also use reliable general academic knowledge to clarify the concept, resolve ambiguity, and give a concrete example, even when the slides do not include one. Do not claim that supplementary details appeared in the slides. If course notes and general knowledge differ, explain the distinction and prioritize what the notes explicitly state for this course.
+Disambiguate technical terms using the subject and surrounding passage, not the most common meaning of an isolated word. For example, in computer organization, "register" means a small, fast storage location inside a processor, not the act of registering at an office.
+Answer in the same language as the student's question. Be a little more detailed than a one-line definition: give a direct definition, explain how or why it works when relevant, and include a simple concrete example if asked or if it improves understanding. Prefer a correct basic example from general knowledge over saying no example exists in the slides. Keep the response focused, beginner-friendly, and based on facts; if a detail is uncertain, say so rather than guessing. Use concise Markdown.
+Return JSON only as {"answer":"..."}.
+
+Subject: ${subjectName}
+Section: ${sectionName}
+Selected passage:
+"""${selectedText}"""
+
+Question: ${question}
+
+Relevant glossary from the matching note:
+"""${glossaryContext || 'No glossary entries for this note.'}"""
+
+Learn notes (summaries of the uploaded course slides):
+"""${noteContext}"""`, false);
       const answer = typeof result.answer === 'string' ? result.answer.trim() : '';
       if (!answer) throw new Error('The AI returned an empty clarification.');
       const { data, error } = await supabase
@@ -830,12 +960,23 @@ export const LearnWorkspace: React.FC<{
     let existingTags: string[] = [];
     let tagWarning = '';
     try {
-      const { data, error } = await supabase.from('curriculum_tags').select('name');
-      if (error) throw error;
-      existingTags = (data || []).map((tag) => tag.name).filter((tag): tag is string => typeof tag === 'string');
+      const pageSize = 500;
+      for (let offset = 0; ; offset += pageSize) {
+        const { data, error } = await supabase
+          .from('curriculum_materials')
+          .select('tag_name')
+          .eq('status', 'approved')
+          .not('tag_name', 'is', null)
+          .range(offset, offset + pageSize - 1);
+        if (error) throw error;
+        existingTags.push(...(data || [])
+          .map((material) => material.tag_name)
+          .filter((tag): tag is string => typeof tag === 'string'));
+        if (!data || data.length < pageSize) break;
+      }
     } catch (error) {
       tagWarning = `Existing tags could not be loaded (${getSupabaseErrorMessage(error)}); moderation and submission will continue without tag matching.`;
-      console.warn('Could not load curriculum tags before Learn material moderation.', error);
+      console.warn('Could not load approved curriculum material tags before Learn material moderation.', error);
     }
     const textualFiles = attachedFiles
       .filter((file) => !file.isPdf)
@@ -857,20 +998,26 @@ ${[sourceText, ...textualFiles].filter(Boolean).join('\n\n')}
 Inspect the ENTIRE attached document and every PDF page, from the first page to the last. Do not stop after the first few topics. Before drafting, identify the distinct slide/section headings and main concepts throughout the source, including its final pages; then ensure the summary covers them in source order. Preserve exact slide/section headings where useful. If the source has more material than the selected mode can explain in depth, briefly cover every section rather than omitting later slides.
 Approve only genuine Computer Science or Software Engineering study material. Reject vendor installers/software, personal/system logs, memes, jokes, and non-educational content. Mark niche or uncertain material as flagged.
 If approved, produce a complete, faithful study-note summary of the entire source, preserving important concepts from the beginning, middle, and ending slides.
+Mandatory for EVERY summary mode, including Very Short, Short, Standard, Expanded, and Detailed: do not include practical tasks for students to carry out during class. Omit exercise, worksheet, and lab instructions; group or discussion activities; class prompts; and submission requirements. Apply this exclusion regardless of the selected length or coverage target. Retain factual content and worked examples from the same slide when they explain a concept or are useful for exam revision.
+Do not mention classroom practicals, labs, exercises, worksheets, or submission activities at all, even to say that they were omitted.
 Selected summary mode: ${selectedSummaryMode.label}
 Summary guidance: ${selectedSummaryMode.guidance}
 Approximate length target: about ${selectedSummaryMode.maxCharacters} characters. Treat this as a guide, not a hard cutoff: completeness and coverage of the final slides are more important than staying under the target. Never end mid-sentence or silently omit later sections to meet the target.
 Never invent details. Do not retain the original file or full source transcript.
 Write the summary in clean, readable Markdown. Use normal Unicode for powers, subscripts, and symbols (for example, 2²⁰ = 1 MiB); do not output LaTeX delimiters ($), LaTeX commands, or raw markup such as \text{}.
 After writing the summary, carefully scan every sentence and heading for technical concepts a student may not know. Include all specialist terms and non-obvious abbreviations/acronyms, including multi-word terms, even when their meaning is only implied by surrounding text. In particular, in digital logic identify terms such as open drain, open collector, totem pole, pull-up resistor, wire-OR/wired-OR, wired-AND, high impedance, floating input, active-low, TTL, and CMOS whenever they appear and are not explicitly explained in plain language. Do not omit a term just because it appears in a heading or inside another highlighted term. Exclude only ordinary words, very common basic abbreviations CPU, GPU, RAM, or terms already clearly defined.
-For every term, use the exact spelling/case from the summary. Explain it in everyday language a beginner can picture; avoid unexplained jargon. Keep each field concise and include an analogy, example, and purpose only when useful. Return at most 20 terms, prioritizing the hardest concepts.
+For every term, use the exact spelling/case from the summary. Explain it in everyday language a beginner can picture; avoid unexplained jargon. Keep fields concise but complete (maximum 240 characters each); never cut a sentence off mid-word. Include an analogy, example, and purpose only when useful. Return up to 40 terms, prioritizing exam-relevant concepts and terms that the notes use without fully explaining.
+
+${LEARN_SUMMARY_TEMPLATE_INSTRUCTIONS}
+
+Keep notes easy to learn from and concise without omitting relevant examinable material. If a value or explanation is absent or unreadable, explicitly mark it as "not specified/readable in source" rather than guessing. Specialist terms may be explained in the hover glossary, but the notes must still state the term correctly in context.
 
 Return JSON only:
 {"verdict":"approved|flagged|rejected","title":"short note title","tagName":"existing matching tag or concise new tag beginning with # and no more than 25 characters","reason":"brief moderation reason","cleanSummary":"complete summary of all source sections; the selected character count is a target, not a hard limit","terms":[{"term":"exact term from cleanSummary","explanation":"plain-language meaning, max 120 characters","analogy":"short everyday comparison or empty string","example":"short example or empty string","whyItMatters":"purpose in plain language or empty string"}]}`,
     });
 
     try {
-      const result = await callGemini(key, requestParts, false, 6000);
+      const result = await callGemini(key, requestParts, false, 12000);
       if (!['approved', 'flagged', 'rejected'].includes(result.verdict)) {
         throw new Error('The AI moderation response did not include a valid verdict.');
       }
@@ -879,21 +1026,21 @@ Return JSON only:
         return;
       }
 
-      const summary = String(result.cleanSummary || '').trim();
+      let summary = String(result.cleanSummary || '').trim();
       if (!summary) throw new Error('The AI returned an empty study summary. Please try again.');
       const moderationTitle = String(result.title || sourceNames[0] || 'Learn study material').trim().slice(0, 160);
+      if (!hasStandardLearnSummaryFormat(summary)) {
+        const formatted = await callGemini(key, [LEARN_SUMMARY_REFORMAT_PROMPT(moderationTitle, summary)], false, 12000);
+        summary = typeof formatted.cleanSummary === 'string' ? formatted.cleanSummary.trim() : '';
+      }
+      if (!summary || !hasStandardLearnSummaryFormat(summary)) {
+        throw new Error('The AI could not format the study notes into the required notebook template. Nothing was saved; please retry.');
+      }
       const proposedTag = typeof result.tagName === 'string'
         ? `#${result.tagName.trim().replace(/^#+/, '').replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_#-]/g, '').slice(0, 24)}`
         : '';
       const normalizedProposedTag = proposedTag.length > 1 ? proposedTag : '#General';
       const tagName = existingTags.find((tag) => tag.toLocaleLowerCase() === normalizedProposedTag.toLocaleLowerCase()) || normalizedProposedTag;
-      const { error: tagError } = await supabase
-        .from('curriculum_tags')
-        .upsert({ name: tagName }, { onConflict: 'name' });
-      if (tagError) {
-        tagWarning = `${tagWarning ? `${tagWarning} ` : ''}The tag could not be added to curriculum_tags (${tagError.message}); the material itself will still be submitted.`;
-        console.warn('Could not register the curriculum tag for Learn material.', tagError);
-      }
 
       const { data: curriculumMaterial, error: materialError } = await supabase
         .from('curriculum_materials')
@@ -928,13 +1075,13 @@ Return JSON only:
             && item.explanation.trim().length > 0
             && summary.toLocaleLowerCase().includes(item.term.trim().toLocaleLowerCase())
           )
-          .slice(0, 20)
+          .slice(0, 40)
           .map((item: Partial<NoteTerm>) => ({
             term: item.term!.trim().slice(0, 60),
-            explanation: item.explanation!.trim().slice(0, 120),
-            analogy: typeof item.analogy === 'string' ? item.analogy.trim().slice(0, 100) : undefined,
-            example: typeof item.example === 'string' ? item.example.trim().slice(0, 100) : undefined,
-            whyItMatters: typeof item.whyItMatters === 'string' ? item.whyItMatters.trim().slice(0, 100) : undefined,
+            explanation: item.explanation!.trim().slice(0, 240),
+            analogy: typeof item.analogy === 'string' ? item.analogy.trim().slice(0, 240) : undefined,
+            example: typeof item.example === 'string' ? item.example.trim().slice(0, 240) : undefined,
+            whyItMatters: typeof item.whyItMatters === 'string' ? item.whyItMatters.trim().slice(0, 240) : undefined,
           }))
         : [];
       const { data, error } = await supabase
@@ -1332,9 +1479,23 @@ Return JSON only:
                               {page.startsNote && <h2 className={`break-words text-sm font-semibold ${notebookMode ? 'text-[#282319]' : 'text-slate-100'}`}>{page.note.title}</h2>}
                               {page.startsNote && <time className={`mt-1 block text-[10px] ${notebookMode ? 'text-[#796b50]' : 'text-slate-600'}`}>{new Date(page.note.created_at).toLocaleString()}</time>}
                             </div>
-                            {page.startsNote && <button type="button" onClick={() => { setDeleteNoteError(null); setNoteToDelete(page.note); }} aria-label={`Delete note ${page.note.title}`} title="Delete note" className={`shrink-0 rounded-lg p-2 cursor-pointer ${notebookMode ? 'text-[#796b50] hover:bg-red-900/10 hover:text-red-700' : 'text-slate-500 hover:bg-red-500/10 hover:text-red-300'}`}>
-                              <Trash2 className="h-4 w-4" />
-                            </button>}
+                            {page.startsNote && <div className="flex shrink-0 items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => void regenerateNote(page.note)}
+                                aria-label={`Regenerate note ${page.note.title}`}
+                                title="Regenerate note from saved text"
+                                disabled={Boolean(isRegeneratingNoteId)}
+                                className={`rounded-lg p-2 cursor-pointer disabled:cursor-wait disabled:opacity-50 ${notebookMode ? 'text-[#796b50] hover:bg-emerald-900/10 hover:text-emerald-700' : 'text-slate-500 hover:bg-emerald-500/10 hover:text-emerald-300'}`}
+                              >
+                                {isRegeneratingNoteId === page.note.id
+                                  ? <Loader2 className="h-4 w-4 animate-spin" />
+                                  : <RefreshCw className="h-4 w-4" />}
+                              </button>
+                              <button type="button" onClick={() => { setDeleteNoteError(null); setNoteToDelete(page.note); }} aria-label={`Delete note ${page.note.title}`} title="Delete note" className={`rounded-lg p-2 cursor-pointer ${notebookMode ? 'text-[#796b50] hover:bg-red-900/10 hover:text-red-700' : 'text-slate-500 hover:bg-red-500/10 hover:text-red-300'}`}>
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>}
                           </div>
                           {page.startsNote && page.note.source_name && <p className={`relative mt-1 text-[10px] ${notebookMode ? 'text-[#796b50]' : 'text-slate-500'}`}>Source: {page.note.source_name}</p>}
                           <div className="relative">
@@ -1585,7 +1746,7 @@ Return JSON only:
               </div>
             </div>
             <div className="mt-2 flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3">
-              <label htmlFor="learn-summary-mode" className="text-[11px] font-medium text-slate-500">Summary length</label>
+              <label htmlFor="learn-summary-mode" className="text-[11px] font-medium text-slate-500">Note detail</label>
               <select
                 id="learn-summary-mode"
                 value={summaryMode}

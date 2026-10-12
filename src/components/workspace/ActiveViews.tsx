@@ -2,100 +2,217 @@ import React from 'react';
 import { Clock, Loader2, Brain, CheckCircle2, ChevronRight, FileCode, CheckSquare, XCircle } from 'lucide-react';
 import type { QuizQuestion, ProgrammingChallenge, CodeAnalysisDrill, QuestionReviewDetail } from '../../types/ise';
 
+export type QuizScoringMode = 'partial' | 'strict' | 'negative';
+
+export const scoreQuizQuestion = (question: QuizQuestion, selected: string[], mode: QuizScoringMode) => {
+  if (question.type === 'text') {
+    const userText = (selected[0] || '').trim().toLowerCase();
+    const isCorrect = question.correctAnswers.some((answer) => userText.includes(answer.toLowerCase()));
+    return { points: isCorrect ? 1 : 0, isCorrect };
+  }
+
+  const correctCount = selected.filter((answer) => question.correctAnswers.includes(answer)).length;
+  const wrongCount = selected.filter((answer) => !question.correctAnswers.includes(answer)).length;
+  const isCorrect = question.correctAnswers.length > 0
+    && correctCount === question.correctAnswers.length
+    && wrongCount === 0;
+  if (isCorrect) return { points: 1, isCorrect };
+  if (mode === 'partial' && correctCount > 0) return { points: 0.5, isCorrect };
+  if (mode === 'negative' && question.correctAnswers.length > 0 && selected.length > 0) {
+    const options = question.options || [];
+    const incorrectDecisions = options.filter((option) =>
+      selected.includes(option) !== question.correctAnswers.includes(option)
+    ).length;
+    return { points: options.length > 0 ? 1 - (2 * incorrectDecisions) / options.length : 0, isCorrect };
+  }
+  return { points: 0, isCorrect };
+};
+
+export const hasMixedQuizAnswer = (type: QuizQuestion['type'] | undefined, selected: string[], correctAnswers: string[]) =>
+  type === 'multiple'
+  && selected.some((answer) => correctAnswers.includes(answer))
+  && selected.some((answer) => !correctAnswers.includes(answer));
+
 /* ==========================================================================
    ACTIVE QUIZ RUNNER
    ========================================================================== */
 export const ActiveQuizView: React.FC<{
-  activeQuiz: { title: string; questions: QuizQuestion[]; timeLimit: number };
+  activeQuiz: { title: string; questions: QuizQuestion[]; timeLimit: number; immediateFeedback: boolean };
   quizTimeLeft: number;
   userAnswers: Record<number, string[]>;
   setUserAnswers: React.Dispatch<React.SetStateAction<Record<number, string[]>>>;
   onAnswerStarted: (questionId: number) => void;
   selectedTag: string;
-  quizScoringMode: 'partial' | 'strict';
+  quizScoringMode: QuizScoringMode;
+  submittedQuestionIds: number[];
+  currentQuestionIndex: number;
+  setCurrentQuestionIndex: (index: number) => void;
+  onSubmitAnswer: (questionId: number) => void;
   onAbandon: () => void;
   onSubmit: () => void;
-}> = ({ activeQuiz, quizTimeLeft, userAnswers, setUserAnswers, onAnswerStarted, selectedTag, quizScoringMode, onAbandon, onSubmit }) => {
+}> = ({ activeQuiz, quizTimeLeft, userAnswers, setUserAnswers, onAnswerStarted, selectedTag, quizScoringMode, submittedQuestionIds, currentQuestionIndex, setCurrentQuestionIndex, onSubmitAnswer, onAbandon, onSubmit }) => {
   const minutesLeft = Math.floor(quizTimeLeft / 60);
   const secondsLeft = quizTimeLeft % 60;
+  const currentQuestion = activeQuiz.questions[currentQuestionIndex];
+  const isSubmitted = currentQuestion ? submittedQuestionIds.includes(currentQuestion.id) : false;
+  const currentAnswer = currentQuestion ? userAnswers[currentQuestion.id] || [] : [];
+  const currentScore = currentQuestion ? scoreQuizQuestion(currentQuestion, currentAnswer, quizScoringMode) : null;
+  const isLastQuestion = currentQuestionIndex === activeQuiz.questions.length - 1;
+  const canFinishImmediate = activeQuiz.immediateFeedback
+    && submittedQuestionIds.length === activeQuiz.questions.length;
 
   return (
-    <div className="w-full max-w-4xl mx-auto h-[calc(100dvh-7.5rem)] sm:h-[82vh] flex flex-col justify-between space-y-3 text-left animate-fade-in overflow-hidden">
-      <div className="flex items-center justify-between p-3.5 sm:p-4 rounded-xl sm:rounded-2xl bg-[#060c20]/95 border border-white/10 shrink-0 backdrop-blur-xl shadow-lg">
-        <div className="min-w-0 pr-2">
-          <span className="text-[10px] font-mono text-[#3ccb57] font-bold uppercase truncate block">{selectedTag || '#General'} · {quizScoringMode.toUpperCase()}</span>
-          <h2 className="text-base sm:text-lg font-bold text-white tracking-tight truncate">{activeQuiz.title}</h2>
-        </div>
-        <div className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3.5 py-1.5 rounded-xl bg-black border border-white/10 font-mono text-xs sm:text-sm text-[#3ccb57] shrink-0">
-          <Clock className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-          <span>{minutesLeft}:{secondsLeft < 10 ? '0' : ''}{secondsLeft}</span>
-        </div>
-      </div>
+    <div className="flex h-full min-h-0 w-full text-left animate-fade-in">
+      <nav aria-label="Quiz questions" className="flex w-16 shrink-0 flex-col items-center gap-2 overflow-y-auto border-r border-white/10 bg-[#060c20]/90 py-4 sm:w-20 sm:gap-2.5">
+          {activeQuiz.questions.map((question, index) => {
+            const selectedAnswer = userAnswers[question.id] || [];
+            const answered = activeQuiz.immediateFeedback
+              ? submittedQuestionIds.includes(question.id)
+              : selectedAnswer.length > 0;
+            const score = answered ? scoreQuizQuestion(question, selectedAnswer, quizScoringMode) : null;
+            const mixedAnswer = answered && hasMixedQuizAnswer(question.type, selectedAnswer, question.correctAnswers);
+            const stateClass = !answered
+              ? 'border-white/15 bg-white/[0.04] text-slate-300 hover:bg-white/10'
+              : mixedAnswer
+                ? 'border-amber-400/50 bg-amber-500/20 text-amber-200'
+              : (score?.points || 0) > 0
+                ? 'border-emerald-400/40 bg-emerald-500/20 text-emerald-300'
+                : 'border-red-400/40 bg-red-500/20 text-red-300';
+            return (
+              <button
+                key={question.id}
+                type="button"
+                onClick={() => setCurrentQuestionIndex(index)}
+                aria-label={`Go to question ${index + 1}${answered ? mixedAnswer ? ', mixed answer' : (score?.points || 0) > 0 ? ', correct' : ', incorrect' : ', unanswered'}`}
+                aria-current={currentQuestionIndex === index ? 'step' : undefined}
+                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border text-xs font-semibold transition sm:h-10 sm:w-10 ${stateClass} ${currentQuestionIndex === index ? 'ring-2 ring-white/70 ring-offset-2 ring-offset-[#060c20]' : ''}`}
+              >
+                {index + 1}
+              </button>
+            );
+          })}
+      </nav>
 
-      <div className="flex-1 min-h-0 overflow-y-auto space-y-3 sm:space-y-4 pr-1 sm:pr-2">
-        {activeQuiz.questions.map((q, idx) => {
-          const selected = userAnswers[q.id] || [];
-          return (
-            <div key={q.id} className="p-4 sm:p-6 rounded-xl sm:rounded-2xl border border-white/10 bg-[#060c20]/90 space-y-3 shadow-md">
-              <div className="flex justify-between text-xs font-mono text-slate-400">
-                <span>Question {idx + 1} of {activeQuiz.questions.length}</span>
-                <span className="text-[#3ccb57] font-semibold">{q.type === 'multiple' ? 'Multiple Choice' : q.type === 'single' ? 'Single Choice' : 'Text Input'}</span>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex shrink-0 items-center justify-between border-b border-white/10 bg-[#060c20]/95 px-4 py-3 sm:px-7">
+          <div className="min-w-0 pr-3">
+            <span className="block truncate text-[10px] font-mono font-bold uppercase text-[#3ccb57]">{selectedTag || '#General'} · {quizScoringMode.toUpperCase()}</span>
+            <h2 className="truncate text-sm font-bold text-white sm:text-base">{activeQuiz.title}</h2>
+          </div>
+          <div className="flex shrink-0 items-center gap-2 rounded-xl border border-white/10 bg-black px-3 py-2 font-mono text-sm text-[#3ccb57]">
+            <Clock className="h-4 w-4" />
+            <span>{minutesLeft}:{secondsLeft < 10 ? '0' : ''}{secondsLeft}</span>
+          </div>
+        </div>
+
+        <div className="flex flex-1 min-h-0 items-center justify-center overflow-y-auto p-4 sm:p-8">
+          {currentQuestion && (
+            <article key={currentQuestion.id} className="w-full max-w-4xl space-y-5 rounded-2xl border border-white/10 bg-[#060c20]/90 p-5 shadow-xl sm:space-y-7 sm:p-9">
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-mono text-slate-400">
+                <span>Question {currentQuestionIndex + 1} of {activeQuiz.questions.length}</span>
+                <span className="text-[#3ccb57] font-semibold">{currentQuestion.type === 'multiple' ? 'Multiple Choice' : currentQuestion.type === 'single' ? 'Single Choice' : 'Text Input'}</span>
               </div>
-              <h3 className="text-sm sm:text-base font-semibold text-white leading-relaxed">{q.question}</h3>
-              {q.codeSnippet && <pre className="p-3 sm:p-3.5 rounded-xl bg-black/70 border border-white/10 font-mono text-[11px] sm:text-xs text-[#3ccb57] overflow-x-auto">{q.codeSnippet}</pre>}
+              <h1 className="text-lg font-semibold leading-relaxed text-white sm:text-2xl">{currentQuestion.question}</h1>
+              {currentQuestion.codeSnippet && <pre className="overflow-x-auto rounded-xl border border-white/10 bg-black/70 p-4 font-mono text-xs text-[#3ccb57] sm:text-sm">{currentQuestion.codeSnippet}</pre>}
 
-              {q.options && q.options.length > 0 && (
-                <div className="space-y-2 pt-1 sm:pt-2">
-                  {q.options.map((opt, oIdx) => {
-                    const isChecked = selected.includes(opt);
+              {currentQuestion.options && currentQuestion.options.length > 0 && (
+                <div className="space-y-3">
+                  {currentQuestion.options.map((option, optionIndex) => {
+                    const selected = currentAnswer.includes(option);
+                    const correct = currentQuestion.correctAnswers.includes(option);
+                    const revealed = activeQuiz.immediateFeedback && isSubmitted;
+                    const revealClass = revealed && correct
+                      ? 'border-emerald-400/60 bg-emerald-500/15 text-emerald-100'
+                      : revealed && selected && !correct
+                        ? 'border-red-400/60 bg-red-500/15 text-red-100'
+                        : selected
+                          ? 'border-[#3ccb57] bg-[#3ccb57]/15 text-white'
+                          : 'border-white/10 bg-black/30 text-slate-300 hover:bg-white/5';
                     return (
-                      <div
-                        key={oIdx}
+                      <button
+                        key={optionIndex}
+                        type="button"
+                        disabled={isSubmitted}
                         onClick={() => {
-                          onAnswerStarted(q.id);
-                          const isMulti = q.type === 'multiple';
-                          setUserAnswers((prev) => {
-                            const cur = prev[q.id] || [];
-                            const upd = isMulti ? (cur.includes(opt) ? cur.filter((x) => x !== opt) : [...cur, opt]) : [opt];
-                            return { ...prev, [q.id]: upd };
+                          onAnswerStarted(currentQuestion.id);
+                          setUserAnswers((previous) => {
+                            const current = previous[currentQuestion.id] || [];
+                            const updated = currentQuestion.type === 'multiple'
+                              ? current.includes(option) ? current.filter((item) => item !== option) : [...current, option]
+                              : [option];
+                            return { ...previous, [currentQuestion.id]: updated };
                           });
                         }}
-                        className={`p-3 sm:p-3.5 rounded-xl border flex items-center justify-between text-xs sm:text-sm cursor-pointer transition-all ${
-                          isChecked ? 'border-[#3ccb57] bg-[#3ccb57]/15 text-white shadow-[0_0_12px_rgba(60,203,87,0.15)]' : 'border-white/10 bg-black/30 text-slate-300 hover:bg-white/5'
-                        }`}
+                        className={`flex w-full items-center gap-3 rounded-xl border p-4 text-left text-sm transition disabled:cursor-default ${revealClass}`}
                       >
-                        <div className="flex items-center gap-2.5 sm:gap-3">
-                          <span className={`h-4 w-4 shrink-0 rounded-${q.type === 'multiple' ? 'sm' : 'full'} border flex items-center justify-center text-[10px] ${isChecked ? 'bg-[#3ccb57] text-black font-bold' : 'border-white/20'}`}>✓</span>
-                          <span>{opt}</span>
-                        </div>
-                      </div>
+                        <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-${currentQuestion.type === 'multiple' ? 'sm' : 'full'} border text-[10px] ${selected ? 'border-current' : 'border-white/25'}`}>
+                          {revealed && correct ? '✓' : selected ? '✓' : ''}
+                        </span>
+                        <span>{option}</span>
+                      </button>
                     );
                   })}
                 </div>
               )}
 
-              {q.type === 'text' && (
-                <div className="pt-2">
-                  <input
-                    type="text"
-                    value={selected[0] || ''}
-                    onChange={(e) => {
-                      onAnswerStarted(q.id);
-                      setUserAnswers((prev) => ({ ...prev, [q.id]: [e.target.value] }));
-                    }}
-                    placeholder="Type your answer here..."
-                    className="w-full p-3 sm:p-3.5 rounded-xl bg-black/50 border border-white/10 text-xs text-white focus:outline-none focus:border-[#3ccb57]"
-                  />
+              {currentQuestion.type === 'text' && (
+                <input
+                  type="text"
+                  value={currentAnswer[0] || ''}
+                  disabled={isSubmitted}
+                  onChange={(event) => {
+                    onAnswerStarted(currentQuestion.id);
+                    setUserAnswers((previous) => ({ ...previous, [currentQuestion.id]: [event.target.value] }));
+                  }}
+                  placeholder="Type your answer here..."
+                  className="w-full rounded-xl border border-white/10 bg-black/50 p-4 text-sm text-white focus:border-[#3ccb57] focus:outline-none disabled:opacity-70"
+                />
+              )}
+
+              {activeQuiz.immediateFeedback && isSubmitted && currentScore && (
+                <div className={`rounded-xl border p-4 ${hasMixedQuizAnswer(currentQuestion.type, currentAnswer, currentQuestion.correctAnswers) ? 'border-amber-400/30 bg-amber-500/[0.08]' : currentScore.points > 0 ? 'border-emerald-400/30 bg-emerald-500/[0.08]' : 'border-red-400/30 bg-red-500/[0.08]'}`}>
+                  <p className={`text-sm font-bold ${hasMixedQuizAnswer(currentQuestion.type, currentAnswer, currentQuestion.correctAnswers) ? 'text-amber-300' : currentScore.points > 0 ? 'text-emerald-300' : 'text-red-300'}`}>
+                    {hasMixedQuizAnswer(currentQuestion.type, currentAnswer, currentQuestion.correctAnswers) ? 'Mixed answers' : currentScore.isCorrect ? 'Correct' : currentScore.points > 0 ? 'Partially correct' : 'Incorrect'}
+                  </p>
+                  {!currentScore.isCorrect && <p className="mt-2 text-xs leading-5 text-slate-200"><span className="font-semibold">Correct answer:</span> {currentQuestion.correctAnswers.join(', ') || 'See explanation below'}</p>}
+                  {currentQuestion.explanation && <p className="mt-2 text-xs leading-6 text-slate-300">{currentQuestion.explanation}</p>}
+                  <p className="mt-2 text-[10px] text-slate-500">Score for this question: {currentScore.points.toFixed(2)} / 1</p>
                 </div>
               )}
-            </div>
-          );
-        })}
-      </div>
+            </article>
+          )}
+        </div>
 
-      <div className="flex justify-between items-center p-3 sm:p-3.5 rounded-xl sm:rounded-2xl bg-[#060c20]/95 border border-white/10 shrink-0 shadow-lg">
-        <button onClick={onAbandon} className="text-xs text-red-400 hover:text-red-300 px-2 cursor-pointer font-semibold">Abandon Quiz</button>
-        <button onClick={onSubmit} className="px-5 sm:px-7 py-2 sm:py-2.5 rounded-xl font-bold text-xs bg-[#3ccb57] text-black hover:bg-[#4ade67] transition-all cursor-pointer shadow-[0_0_15px_rgba(60,203,87,0.3)]">Submit Quiz</button>
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-white/10 bg-[#060c20]/95 p-3 sm:px-6 sm:py-4">
+          <button type="button" onClick={onAbandon} className="mr-auto px-2 text-xs font-semibold text-red-400 hover:text-red-300">Abandon Quiz</button>
+          {currentQuestionIndex > 0 && (
+            <button type="button" onClick={() => setCurrentQuestionIndex(currentQuestionIndex - 1)} className="rounded-xl border border-white/10 px-4 py-2.5 text-xs font-semibold text-slate-200 hover:bg-white/[0.06]">Back</button>
+          )}
+          {activeQuiz.immediateFeedback ? (
+            isSubmitted ? (
+              canFinishImmediate ? (
+                <button type="button" onClick={onSubmit} className="rounded-xl bg-[#3ccb57] px-5 py-2.5 text-xs font-bold text-black hover:bg-[#4ade67]">Finish Quiz</button>
+              ) : (
+                <button type="button" onClick={() => setCurrentQuestionIndex((currentQuestionIndex + 1) % activeQuiz.questions.length)} className="rounded-xl bg-[#3ccb57] px-5 py-2.5 text-xs font-bold text-black hover:bg-[#4ade67]">
+                  {isLastQuestion ? 'Review unanswered' : 'Next Question'}
+                </button>
+              )
+            ) : (
+              <button
+                type="button"
+                onClick={() => currentQuestion && onSubmitAnswer(currentQuestion.id)}
+                disabled={!currentQuestion || currentAnswer.length === 0 || submittedQuestionIds.includes(currentQuestion.id)}
+                className="rounded-xl bg-[#3ccb57] px-5 py-2.5 text-xs font-bold text-black hover:bg-[#4ade67] disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Submit Answer
+              </button>
+            )
+          ) : currentQuestionIndex < activeQuiz.questions.length - 1 ? (
+            <button type="button" onClick={() => setCurrentQuestionIndex(currentQuestionIndex + 1)} className="rounded-xl bg-[#3ccb57] px-5 py-2.5 text-xs font-bold text-black hover:bg-[#4ade67]">Next Question</button>
+          ) : (
+            <button type="button" onClick={onSubmit} className="rounded-xl bg-[#3ccb57] px-5 py-2.5 text-xs font-bold text-black hover:bg-[#4ade67]">Submit Quiz</button>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -128,7 +245,9 @@ export const QuizResultsView: React.FC<{
         <div
           key={idx}
           className={`p-4 sm:p-5 rounded-xl sm:rounded-2xl border ${
-            item.isCorrect
+            hasMixedQuizAnswer(item.questionType, item.userAnswer, item.correctAnswers)
+              ? 'border-amber-500/40 bg-amber-500/5'
+              : item.isCorrect
               ? 'border-[#3ccb57]/40 bg-[#3ccb57]/5'
               : item.points > 0
               ? 'border-amber-500/40 bg-amber-500/5'
@@ -139,13 +258,15 @@ export const QuizResultsView: React.FC<{
             <span className="text-white font-bold flex items-center gap-1.5">
               {item.isCorrect ? (
                 <CheckCircle2 className="h-4 w-4 text-[#3ccb57]" />
+              ) : hasMixedQuizAnswer(item.questionType, item.userAnswer, item.correctAnswers) ? (
+                <XCircle className="h-4 w-4 text-amber-400" />
               ) : (
                 <XCircle className="h-4 w-4 text-red-400" />
               )}
               Question {idx + 1}
             </span>
-            <span className={`font-bold px-2.5 py-0.5 rounded-full ${item.points > 0 ? 'bg-[#3ccb57]/20 text-[#3ccb57]' : 'bg-red-500/20 text-red-400'}`}>
-              {item.points} / 1.0 pts
+            <span className={`font-bold px-2.5 py-0.5 rounded-full ${hasMixedQuizAnswer(item.questionType, item.userAnswer, item.correctAnswers) ? 'bg-amber-500/20 text-amber-300' : item.points > 0 ? 'bg-[#3ccb57]/20 text-[#3ccb57]' : 'bg-red-500/20 text-red-400'}`}>
+              {item.points.toFixed(2)} / 1.0 pts
             </span>
           </div>
 

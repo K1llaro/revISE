@@ -4,9 +4,10 @@ import { supabase } from '../../lib/supabase';
 import type { UserSession, StudyYear, ActiveModal, AppView, TestHistoryItem, FlaggedMaterial, AttachedFile, QuizQuestion, ProgrammingChallenge, CodeAnalysisDrill, QuestionReviewDetail, LeaderboardEntry, StudyMaterial } from '../../types/ise';
 import { DEFAULT_YEAR_PROMPTS } from '../../lib/constants';
 import { callGemini } from '../../lib/gemini';
+import { getChoiceLengthBiasWarning, getQuestionTypeCountMismatch } from '../../lib/quizQuality';
 import { LearnWorkspace } from './LearnWorkspace';
-import { ActiveQuizView, QuizResultsView, ActiveProgView, ProgResultsView, ActiveAnalysisView, AnalysisResultsView } from './ActiveViews';
-import { QuizModal, ProgrammingModal, AnalysisModal, UploadModal, AdminModal, HistoryModal, SettingsModal, LeaderboardModal } from './WorkspaceModals';
+import { ActiveQuizView, QuizResultsView, ActiveProgView, ProgResultsView, ActiveAnalysisView, AnalysisResultsView, scoreQuizQuestion, type QuizScoringMode } from './ActiveViews';
+import { QuizModal, ProgrammingModal, AnalysisModal, UploadModal, AdminModal, HistoryModal, SettingsModal, LeaderboardModal, type QuizPreset, type QuizPresetSettings } from './WorkspaceModals';
 
 const HOME_PHRASES = [
   'It\'s not that complicated.',
@@ -131,11 +132,19 @@ export const AuthenticatedWorkspace: React.FC<{
   const [quizCustomTimer, setQuizCustomTimer] = useState('');
   const [quizThinkingMode, setQuizThinkingMode] = useState(true);
   const [quizPrompt, setQuizPrompt] = useState('');
-  const [quizScoringMode, setQuizScoringMode] = useState<'partial' | 'strict'>('partial');
-  const [quizTypes, setQuizTypes] = useState({ mcq: true, text: false, single: true });
+  const [quizScoringMode, setQuizScoringMode] = useState<QuizScoringMode>('partial');
+  const [immediateQuizFeedback, setImmediateQuizFeedback] = useState(false);
+  const [quizTypePercentages, setQuizTypePercentages] = useState({ mcq: 75, text: 5, single: 20 });
+  const [quizPresets, setQuizPresets] = useState<QuizPreset[]>([]);
+  const [selectedQuizPresetId, setSelectedQuizPresetId] = useState<string | null>(null);
+  const [quizPresetsLoadedForUser, setQuizPresetsLoadedForUser] = useState<string | null>(null);
+  const [quizPresetError, setQuizPresetError] = useState<string | null>(null);
   const [quizAttachedFiles, setQuizAttachedFiles] = useState<AttachedFile[]>([]);
-  const [activeQuiz, setActiveQuiz] = useState<{ title: string; questions: QuizQuestion[]; timeLimit: number } | null>(null);
+  const [activeQuiz, setActiveQuiz] = useState<{ title: string; questions: QuizQuestion[]; timeLimit: number; immediateFeedback: boolean } | null>(null);
+  const [activeQuizTag, setActiveQuizTag] = useState('');
   const [userAnswers, setUserAnswers] = useState<Record<number, string[]>>({});
+  const [submittedQuizQuestionIds, setSubmittedQuizQuestionIds] = useState<number[]>([]);
+  const [currentQuizQuestionIndex, setCurrentQuizQuestionIndex] = useState(0);
   const quizStartedAtRef = useRef<number | null>(null);
   const questionResponseTimesRef = useRef<Record<number, number>>({});
   const [quizTimeLeft, setQuizTimeLeft] = useState(0);
@@ -147,6 +156,7 @@ export const AuthenticatedWorkspace: React.FC<{
   const [progPrompt, setProgPrompt] = useState('');
   const [progAttachedFiles, setProgAttachedFiles] = useState<AttachedFile[]>([]);
   const [activeProg, setActiveProg] = useState<ProgrammingChallenge | null>(null);
+  const [activeProgTag, setActiveProgTag] = useState('');
   const [studentCodeInput, setStudentCodeInput] = useState('');
   const [progResults, setProgResults] = useState<{ score: number; feedback: string } | null>(null);
 
@@ -156,6 +166,7 @@ export const AuthenticatedWorkspace: React.FC<{
   const [analysisPrompt, setAnalysisPrompt] = useState('');
   const [analysisAttachedFiles, setAnalysisAttachedFiles] = useState<AttachedFile[]>([]);
   const [activeAnalysis, setActiveAnalysis] = useState<CodeAnalysisDrill | null>(null);
+  const [activeAnalysisTag, setActiveAnalysisTag] = useState('');
   const [predictedOutputInput, setPredictedOutputInput] = useState('');
   const [scratchpadNotes, setScratchpadNotes] = useState('');
   const [analysisResults, setAnalysisResults] = useState<{ score: number; feedback: string } | null>(null);
@@ -187,12 +198,6 @@ export const AuthenticatedWorkspace: React.FC<{
     };
     const mult = multipliers[difficulty] || 1.0;
     return Math.round(base * mult);
-  };
-
-  const handleAddNewTag = async (tagName: string) => {
-    const clean = tagName.startsWith('#') ? tagName : `#${tagName}`;
-    await supabase.from('curriculum_tags').upsert({ name: clean }, { onConflict: 'name' });
-    setAvailableTags((prev) => Array.from(new Set([clean, ...prev])));
   };
 
   // 🏆 Загрузка и расчет позиций лидерборда
@@ -293,13 +298,35 @@ export const AuthenticatedWorkspace: React.FC<{
     return materials;
   };
 
-  const loadData = async () => {
-    const { data: tags } = await supabase.from('curriculum_tags').select('name');
-    if (tags && tags.length > 0) {
-      setAvailableTags(tags.map((t) => t.name));
-    } else {
-      setAvailableTags(['#Java_OOP', '#Java_Arrays_Collections', '#AWS_CDK_Infrastructure', '#GitHub_Actions_CICD', '#Comp_Org_Buses']);
+  const loadAvailableTags = async () => {
+    const tagNames: string[] = [];
+    const pageSize = 500;
+    for (let offset = 0; ; offset += pageSize) {
+      const { data, error } = await supabase
+        .from('curriculum_materials')
+        .select('tag_name')
+        .eq('status', 'approved')
+        .not('tag_name', 'is', null)
+        .range(offset, offset + pageSize - 1);
+      if (error) {
+        console.error('Could not load approved curriculum tags.', error);
+        setAvailableTags([]);
+        return;
+      }
+      tagNames.push(...(data || [])
+        .map((material) => material.tag_name)
+        .filter((tag): tag is string => typeof tag === 'string' && tag.trim().length > 1));
+      if (!data || data.length < pageSize) break;
     }
+
+    const uniqueTags = Array.from(
+      new Map(tagNames.map((tag) => [tag.trim().toLocaleLowerCase(), tag.trim()])).values()
+    ).sort((left, right) => left.localeCompare(right));
+    setAvailableTags(uniqueTags);
+  };
+
+  const loadData = async () => {
+    await loadAvailableTags();
 
     const { data: hist } = await supabase
       .from('test_history')
@@ -363,6 +390,45 @@ export const AuthenticatedWorkspace: React.FC<{
   };
 
   useEffect(() => { loadData(); }, [user.id]);
+  useEffect(() => {
+    if (activeModal === 'quiz') void loadAvailableTags();
+  }, [activeModal, user.id]);
+
+  useEffect(() => {
+    setQuizPresetsLoadedForUser(null);
+    try {
+      const storedPresets = localStorage.getItem(`revise_quiz_presets_${user.id}`);
+      const parsedPresets: unknown = storedPresets ? JSON.parse(storedPresets) : [];
+      if (!Array.isArray(parsedPresets)) {
+        throw new Error('Saved quiz presets are not in a valid format.');
+      }
+      const validPresets = parsedPresets.filter((preset): preset is QuizPreset =>
+        typeof preset?.id === 'string'
+        && typeof preset?.name === 'string'
+        && typeof preset?.settings === 'object'
+        && preset.settings !== null
+      ).slice(0, 5);
+      setQuizPresets(validPresets);
+      setSelectedQuizPresetId(null);
+      setQuizPresetError(null);
+    } catch (error) {
+      console.error('Could not load quiz presets.', error);
+      setQuizPresets([]);
+      setQuizPresetError('Could not load saved quiz presets from this browser.');
+    } finally {
+      setQuizPresetsLoadedForUser(user.id);
+    }
+  }, [user.id]);
+
+  useEffect(() => {
+    if (quizPresetsLoadedForUser !== user.id) return;
+    try {
+      localStorage.setItem(`revise_quiz_presets_${user.id}`, JSON.stringify(quizPresets));
+    } catch (error) {
+      console.error('Could not save quiz presets.', error);
+      setQuizPresetError('Could not save quiz presets in browser storage.');
+    }
+  }, [quizPresets, quizPresetsLoadedForUser, user.id]);
 
   useEffect(() => {
     if (currentView !== 'active_quiz' || quizTimeLeft <= 0) return;
@@ -379,6 +445,81 @@ export const AuthenticatedWorkspace: React.FC<{
     return () => clearInterval(interval);
   }, [currentView, quizTimeLeft]);
 
+  const getQuizPresetSettings = (): QuizPresetSettings => ({
+    quizCustomTitle,
+    quizQuestionCount,
+    quizCustomCount,
+    quizTimerMinutes,
+    quizCustomTimer,
+    quizScoringMode,
+    immediateQuizFeedback,
+    quizTypePercentages: { ...quizTypePercentages },
+    quizThinkingMode,
+    selectedTag,
+    quizPrompt,
+  });
+
+  const updateQuizPresets = (nextPresets: QuizPreset[]) => {
+    setQuizPresets(nextPresets);
+    try {
+      localStorage.setItem(`revise_quiz_presets_${user.id}`, JSON.stringify(nextPresets));
+      setQuizPresetError(null);
+    } catch (error) {
+      console.error('Could not save quiz presets.', error);
+      setQuizPresetError('Could not save quiz presets in browser storage.');
+    }
+  };
+
+  const handleCreateQuizPreset = () => {
+    if (quizPresets.length >= 5) {
+      setQuizPresetError('You can save up to 5 quiz presets. Delete one to create another.');
+      return;
+    }
+    const preset: QuizPreset = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      name: `Preset ${quizPresets.length + 1}`,
+      settings: getQuizPresetSettings(),
+    };
+    updateQuizPresets([...quizPresets, preset]);
+    setSelectedQuizPresetId(preset.id);
+  };
+
+  const handleApplyQuizPreset = (presetId: string) => {
+    const preset = quizPresets.find((item) => item.id === presetId);
+    if (!preset) return;
+    setQuizCustomTitle(preset.settings.quizCustomTitle);
+    setQuizQuestionCount(preset.settings.quizQuestionCount);
+    setQuizCustomCount(preset.settings.quizCustomCount);
+    setQuizTimerMinutes(preset.settings.quizTimerMinutes);
+    setQuizCustomTimer(preset.settings.quizCustomTimer);
+    setQuizScoringMode(preset.settings.quizScoringMode);
+    setImmediateQuizFeedback(preset.settings.immediateQuizFeedback);
+    setQuizTypePercentages(preset.settings.quizTypePercentages);
+    setQuizThinkingMode(preset.settings.quizThinkingMode);
+    setSelectedTag(preset.settings.selectedTag);
+    setQuizPrompt(preset.settings.quizPrompt);
+    setSelectedQuizPresetId(preset.id);
+    setQuizPresetError(null);
+  };
+
+  const handleSaveQuizPreset = () => {
+    if (!selectedQuizPresetId) return;
+    updateQuizPresets(quizPresets.map((preset) =>
+      preset.id === selectedQuizPresetId ? { ...preset, settings: getQuizPresetSettings() } : preset
+    ));
+  };
+
+  const handleRenameQuizPreset = (presetId: string, name: string) => {
+    updateQuizPresets(quizPresets.map((preset) =>
+      preset.id === presetId ? { ...preset, name } : preset
+    ));
+  };
+
+  const handleDeleteQuizPreset = (presetId: string) => {
+    updateQuizPresets(quizPresets.filter((preset) => preset.id !== presetId));
+    if (selectedQuizPresetId === presetId) setSelectedQuizPresetId(null);
+  };
+
   /* 🛡️ ИНДЕКСАЦИЯ С ЦЕНЗОРОМ */
   const indexSessionMaterial = async (
     files: AttachedFile[],
@@ -387,30 +528,37 @@ export const AuthenticatedWorkspace: React.FC<{
     aiDetectedTag: string | undefined,
     aiVerdict: 'approved' | 'flagged' | 'rejected' | undefined,
     categoryType: 'Quiz' | 'Programming' | 'Code Analysis'
-  ): Promise<string> => {
+  ): Promise<string | null> => {
     let finalTag = selectedTag;
 
+    if (!['approved', 'flagged', 'rejected'].includes(aiVerdict || '')) {
+      throw new Error(`AI content moderation did not return a valid verdict for ${categoryType}.`);
+    }
     if (aiVerdict === 'rejected') {
       console.warn(`[AI Guardrail] Material rejected by AI (${aiTitle}). Zero bytes saved to Supabase.`);
-      return finalTag;
+      return null;
     }
 
-    if (aiDetectedTag) {
-      const cleanTag = '#' + aiDetectedTag.trim().replace(/^#+/, '').replace(/\s+/g, '_');
-      finalTag = cleanTag;
-      await supabase.from('curriculum_tags').upsert({ name: cleanTag }, { onConflict: 'name' });
-      setAvailableTags((prev) => Array.from(new Set([cleanTag, ...prev])));
-      setSelectedTag(cleanTag);
+    if (!aiDetectedTag?.trim()) {
+      throw new Error(`AI tag moderation did not return a tag for ${categoryType}. Please retry.`);
     }
+    const normalizedTag = `#${aiDetectedTag.trim().replace(/^#+/, '').replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 24)}`;
+    if (normalizedTag.length <= 1) throw new Error(`AI returned an invalid curriculum tag for ${categoryType}. Please retry.`);
+    const cleanTag = availableTags.find((tag) => tag.toLocaleLowerCase() === normalizedTag.toLocaleLowerCase()) || normalizedTag;
+    finalTag = cleanTag;
+    if (files.length > 0 && aiVerdict === 'approved') {
+      setAvailableTags((prev) => Array.from(new Set([cleanTag, ...prev])));
+    }
+    setSelectedTag(cleanTag);
 
     if (files && files.length > 0 && aiVerdict) {
       const fileName = files[0].name;
       const title = customTitle.trim() || aiTitle || fileName;
 
-      await supabase.from('curriculum_materials').insert({
+      const { error } = await supabase.from('curriculum_materials').insert({
         submitted_by: user.id,
         submitter_email: user.email,
-        title: title,
+        title,
         tag_name: finalTag || '#General',
         content_text: `[Source: ${categoryType} · ${fileName}]\nVerified by AI Guardrail.`,
         status: aiVerdict,
@@ -418,6 +566,10 @@ export const AuthenticatedWorkspace: React.FC<{
           ? 'Flagged for admin audit: niche, third-party software, or unverified curriculum relevance.'
           : `AI Guardrail Approved for ${categoryType}.`,
       });
+      if (error) {
+        console.error(`Could not save ${categoryType} material with moderated tag.`, error);
+        throw new Error(`Could not save the moderated ${categoryType} material: ${error.message}`);
+      }
     }
 
     return finalTag;
@@ -433,6 +585,35 @@ export const AuthenticatedWorkspace: React.FC<{
 
     const questionCount = quizCustomCount ? parseInt(quizCustomCount, 10) : quizQuestionCount;
     const minutes = quizCustomTimer ? parseInt(quizCustomTimer, 10) : quizTimerMinutes;
+    const percentageTotal = quizTypePercentages.mcq + quizTypePercentages.text + quizTypePercentages.single;
+    if (percentageTotal !== 100) {
+      setIsGenerating(false);
+      setGenerationError(`Question type percentages must add up to 100% (currently ${percentageTotal}%).`);
+      return;
+    }
+    if (!Number.isInteger(questionCount) || questionCount < 1 || questionCount > 30) {
+      setIsGenerating(false);
+      setGenerationError('Choose between 1 and 30 questions.');
+      return;
+    }
+    const typePercentages = [
+      { type: 'multiple', percentage: quizTypePercentages.mcq },
+      { type: 'text', percentage: quizTypePercentages.text },
+      { type: 'single', percentage: quizTypePercentages.single },
+    ] as const;
+    const typeAllocations = typePercentages.map(({ type, percentage }) => {
+      const exactCount = questionCount * percentage / 100;
+      return { type, count: Math.floor(exactCount), remainder: exactCount - Math.floor(exactCount) };
+    });
+    let remainingQuestionCount = questionCount - typeAllocations.reduce((total, allocation) => total + allocation.count, 0);
+    const largestRemainderTypes = [...typeAllocations]
+      .filter(({ type }) => typePercentages.find((entry) => entry.type === type)?.percentage)
+      .sort((left, right) => right.remainder - left.remainder);
+    for (let index = 0; remainingQuestionCount > 0; index += 1) {
+      const allocation = typeAllocations.find((item) => item.type === largestRemainderTypes[index % largestRemainderTypes.length].type);
+      if (allocation) allocation.count += 1;
+      remainingQuestionCount -= 1;
+    }
     let linkedMaterials: StudyMaterial[];
     try {
       linkedMaterials = await fetchStudyMaterials(selectedTag || undefined);
@@ -443,9 +624,27 @@ export const AuthenticatedWorkspace: React.FC<{
     }
 
     const allowedFormats: string[] = [];
-    if (quizTypes.single) allowedFormats.push('single-choice');
-    if (quizTypes.mcq) allowedFormats.push('multiple-choice (multiple correct answers)');
-    if (quizTypes.text) allowedFormats.push('fill-in open text');
+    const questionTypePlan: QuizQuestion['type'][] = [];
+    for (const { type, count } of typeAllocations) {
+      if (count === 0) continue;
+      if (type === 'multiple') allowedFormats.push('multiple-choice (multiple correct answers)');
+      if (type === 'single') allowedFormats.push('single-choice');
+      if (type === 'text') allowedFormats.push('fill-in open text');
+      questionTypePlan.push(...Array.from({ length: count }, () => type));
+    }
+    for (let index = questionTypePlan.length - 1; index > 0; index -= 1) {
+      const swapIndex = Math.floor(Math.random() * (index + 1));
+      [questionTypePlan[index], questionTypePlan[swapIndex]] = [questionTypePlan[swapIndex], questionTypePlan[index]];
+    }
+    const typeCounts = questionTypePlan.reduce<Record<string, number>>((counts, type) => {
+      counts[type] = (counts[type] || 0) + 1;
+      return counts;
+    }, {});
+    if (questionTypePlan.length !== questionCount) {
+      setIsGenerating(false);
+      setGenerationError('Could not create a valid question type mix. Please review the selected types or your prompt.');
+      return;
+    }
 
     const requestParts: any[] = [];
     quizAttachedFiles.forEach((file) => {
@@ -461,7 +660,9 @@ You are the lead examiner and academic gatekeeper for ISE at University of Limer
 Cohort Context: ${yearPrompts[currentYear]}
 Target Tag Provided: ${selectedTag || 'None'}
 Existing Curriculum Tags in Database: [${availableTags.join(', ')}]
+Tag audit: Treat the user's Target Tag as a suggestion, not an instruction. Inspect the supplied slides and approved material summaries, and verify the tag matches their actual subject. Reuse the closest exact existing tag when suitable; if none fits, create one concise, specific new tag beginning with # (maximum 25 characters). Never keep an unrelated tag or invent near-duplicate spellings. This moderation is mandatory, including when no target tag was selected.
 Allowed Formats: ${allowedFormats.join(', ')}
+Required question type counts (follow exactly): ${JSON.stringify(typeCounts)}
 User Custom Prompt: ${quizPrompt || 'Comprehensive module exam'}
 User Preferred Title: ${quizCustomTitle || 'None'}
 Approved Supabase study materials for this topic:
@@ -473,6 +674,10 @@ CRITICAL AUDIT INSTRUCTIONS:
 3. If genuine slides are attached, the quiz must also be strictly based on the attached materials.
 4. If approved/flagged, reuse an existing tag from the database or create a new hashtag starting with '#' (e.g. #Comp_Org_Buses).
 5. Give every question a concise topic suitable for a learning-mastery report.
+6. Follow the required question type counts exactly. Do not silently replace multiple-choice or open-text questions with single-choice questions. For "multiple", provide 2–3 correct options when the material supports it and 4–10 total answer options; for "single", provide exactly one correct option and 4 total answer options.
+7. Make the quiz moderately challenging: favor application, interpretation, comparisons, and short multi-step reasoning grounded in the supplied material. Avoid trivial recognition questions and trick wording. Keep each question unambiguous and answerable from the material.
+8. Make every answer option parallel in grammar, specificity, and approximate word/character count. Keep each option within about 20% of the others' length whenever the content allows. Never make a correct option longer, more detailed, or more qualified than distractors; put needed detail in the question stem or explanation instead. Do not pad distractors with irrelevant words. Vary the correct answer's position across first, second, third, and fourth options; avoid repeated position patterns. Ensure incorrect options are genuinely wrong, not merely less complete.
+9. Follow the required question type counts exactly. These counts are calculated from the user's configured percentages and take precedence over conflicting type requests in the custom prompt.
 
 Task: Generate exactly ${questionCount} questions.
 Output strictly as JSON without markdown:
@@ -498,9 +703,37 @@ Output strictly as JSON without markdown:
     requestParts.push({ text: promptText });
 
     try {
-      const data = await callGemini(key, requestParts, quizThinkingMode);
+      let data = await callGemini(key, requestParts, quizThinkingMode);
+      if (!Array.isArray(data.questions) || data.questions.length !== questionCount) {
+        throw new Error(`The AI returned ${Array.isArray(data.questions) ? data.questions.length : 0} questions; exactly ${questionCount} were requested. Please retry.`);
+      }
+      let typeMismatch = getQuestionTypeCountMismatch(data.questions, typeCounts);
+      if (typeMismatch) {
+        const correctionPrompt = `The previous quiz response did not match the required question type counts: ${typeMismatch}.
+Regenerate the ENTIRE quiz now. Return exactly ${questionCount} questions with these exact type counts: multiple=${typeCounts.multiple || 0}, text=${typeCounts.text || 0}, single=${typeCounts.single || 0}.
+Use only the exact "type" values "multiple", "text", and "single". Do not omit a type with a non-zero required count, do not substitute one type for another, and do not include any type whose required count is zero. Keep all questions grounded in the provided study material and preserve the required JSON schema. Return JSON only.`;
+        data = await callGemini(key, [...requestParts, { text: correctionPrompt }], quizThinkingMode);
+        if (!Array.isArray(data.questions) || data.questions.length !== questionCount) {
+          throw new Error(`The AI retry returned ${Array.isArray(data.questions) ? data.questions.length : 0} questions; exactly ${questionCount} were requested. No quiz was started.`);
+        }
+        typeMismatch = getQuestionTypeCountMismatch(data.questions, typeCounts);
+        if (typeMismatch) {
+          throw new Error(`The AI repeatedly returned an incorrect question mix (${typeMismatch}). No quiz was started. Please try again or adjust the question type percentages.`);
+        }
+      }
+      const invalidMultipleChoice = data.questions.find(
+        (question: QuizQuestion) => question.type === 'multiple'
+          && (!Array.isArray(question.options) || question.options.length < 4 || question.options.length > 10)
+      );
+      if (invalidMultipleChoice) {
+        throw new Error('Every Multiple Choice question must have between 4 and 10 answer options. Please retry.');
+      }
+      const lengthBiasWarning = getChoiceLengthBiasWarning(data.questions as QuizQuestion[]);
+      if (lengthBiasWarning) {
+        throw new Error(`${lengthBiasWarning} The quiz was not started.`);
+      }
 
-      await indexSessionMaterial(
+      const moderatedTag = await indexSessionMaterial(
         quizAttachedFiles,
         quizCustomTitle,
         data.title,
@@ -508,30 +741,112 @@ Output strictly as JSON without markdown:
         data.contentVerdict,
         'Quiz'
       );
+      if (moderatedTag === null) {
+        throw new Error('This quiz material did not pass AI content moderation and cannot be started.');
+      }
 
       const finalTitle = quizCustomTitle.trim() || data.title || 'Technical Quiz Drill';
 
-      setActiveQuiz({
-        title: finalTitle,
-        questions: data.questions.map((question: QuizQuestion) => {
-          const slideTitle = (question.slideTitle || '').trim();
-          const matchedMaterial = linkedMaterials.find(
-            (material) => {
-              const normalizedSlideTitle = slideTitle.toLowerCase();
-              return normalizedSlideTitle === material.title.toLowerCase()
-                || (normalizedSlideTitle.length > 0 && material.summary.toLowerCase().includes(normalizedSlideTitle));
-            }
-          );
-          return {
-            ...question,
-            topic: question.topic?.trim() || undefined,
-            slideTitle: matchedMaterial ? slideTitle || matchedMaterial.title : undefined,
-          };
-        }),
-        timeLimit: minutes,
+      const generatedQuestions = data.questions as QuizQuestion[];
+      const normalizedQuestions: QuizQuestion[] = generatedQuestions.map((question: QuizQuestion, index: number) => {
+        if (!question || typeof question.question !== 'string' || !Array.isArray(question.correctAnswers)) {
+          throw new Error(`Question ${index + 1} is missing its prompt or answer key. Please retry.`);
+        }
+        const options = Array.isArray(question.options) ? question.options.filter((option): option is string => typeof option === 'string') : [];
+        const matchedAnswers = question.correctAnswers.map((answer) =>
+          options.find((option) => option.trim().toLocaleLowerCase() === String(answer).trim().toLocaleLowerCase())
+        );
+        if (question.type !== 'text' && options.length < 2) {
+          throw new Error(`Question ${index + 1} has too few answer options. Please retry.`);
+        }
+        if (question.type === 'multiple' && (options.length < 4 || options.length > 10)) {
+          throw new Error(`Multiple-choice question ${index + 1} must have between 4 and 10 answer options. Please retry.`);
+        }
+        if (question.type === 'text' && question.correctAnswers.length === 0) {
+          throw new Error(`Text question ${index + 1} is missing accepted answers. Please retry.`);
+        }
+        if (question.type !== 'text' && (matchedAnswers.some((answer) => !answer) || matchedAnswers.length === 0)) {
+          throw new Error(`Question ${index + 1} has an answer key that does not match its options. Please retry.`);
+        }
+        if (question.type === 'single' && matchedAnswers.length !== 1) {
+          throw new Error(`Single-choice question ${index + 1} must have exactly one correct option. Please retry.`);
+        }
+        if (question.type === 'multiple' && matchedAnswers.length < 2) {
+          throw new Error(`Multiple-choice question ${index + 1} must have at least two correct options. Please retry.`);
+        }
+        const slideTitle = (question.slideTitle || '').trim();
+        const matchedMaterial = linkedMaterials.find((material) => {
+          const normalizedSlideTitle = slideTitle.toLowerCase();
+          return normalizedSlideTitle === material.title.toLowerCase()
+            || (normalizedSlideTitle.length > 0 && material.summary.toLowerCase().includes(normalizedSlideTitle));
+        });
+        return {
+          ...question,
+          id: index + 1,
+          options,
+          correctAnswers: question.type === 'text'
+            ? question.correctAnswers
+            : matchedAnswers.filter((answer): answer is string => typeof answer === 'string'),
+          topic: question.topic?.trim() || undefined,
+          slideTitle: matchedMaterial ? slideTitle || matchedMaterial.title : undefined,
+        } satisfies QuizQuestion;
       });
 
+      const singleChoiceIndexes = normalizedQuestions
+        .map((question: QuizQuestion, index: number) => ({ question, index }))
+        .filter(({ question }: { question: QuizQuestion; index: number }) => question.type === 'single');
+      const indexesByOptionCount = new Map<number, number[]>();
+      for (const { question, index } of singleChoiceIndexes) {
+        const optionCount = question.options?.length || 0;
+        indexesByOptionCount.set(optionCount, [...(indexesByOptionCount.get(optionCount) || []), index]);
+      }
+      for (const [optionCount, indexes] of indexesByOptionCount) {
+        const positionOffset = Math.floor(Math.random() * optionCount);
+        const correctPositions = Array.from({ length: indexes.length }, (_, index) => (index + positionOffset) % optionCount);
+        for (let index = correctPositions.length - 1; index > 0; index -= 1) {
+          const swapIndex = Math.floor(Math.random() * (index + 1));
+          [correctPositions[index], correctPositions[swapIndex]] = [correctPositions[swapIndex], correctPositions[index]];
+        }
+        indexes.forEach((questionIndex: number, index: number) => {
+          const question = normalizedQuestions[questionIndex];
+          const answer = question.correctAnswers[0];
+          const distractors = (question.options || []).filter((option: string) => option !== answer);
+          for (let cursor = distractors.length - 1; cursor > 0; cursor -= 1) {
+            const swapIndex = Math.floor(Math.random() * (cursor + 1));
+            [distractors[cursor], distractors[swapIndex]] = [distractors[swapIndex], distractors[cursor]];
+          }
+          distractors.splice(correctPositions[index], 0, answer);
+          question.options = distractors;
+        });
+      }
+      for (const question of normalizedQuestions.filter((item: QuizQuestion) => item.type === 'multiple')) {
+        const options = [...(question.options || [])];
+        for (let index = options.length - 1; index > 0; index -= 1) {
+          const swapIndex = Math.floor(Math.random() * (index + 1));
+          [options[index], options[swapIndex]] = [options[swapIndex], options[index]];
+        }
+        question.options = options;
+      }
+
+      for (let index = normalizedQuestions.length - 1; index > 0; index -= 1) {
+        const swapIndex = Math.floor(Math.random() * (index + 1));
+        [normalizedQuestions[index], normalizedQuestions[swapIndex]] = [normalizedQuestions[swapIndex], normalizedQuestions[index]];
+      }
+      normalizedQuestions.forEach((question: QuizQuestion, index: number) => {
+        question.id = index + 1;
+      });
+
+      setActiveQuiz({
+        title: finalTitle,
+        immediateFeedback: immediateQuizFeedback,
+        questions: normalizedQuestions,
+        timeLimit: minutes,
+      });
+      setActiveQuizTag(moderatedTag);
+
       setUserAnswers({});
+      setSubmittedQuizQuestionIds([]);
+      setCurrentQuizQuestionIndex(0);
       questionResponseTimesRef.current = {};
       setQuizTimeLeft(minutes * 60);
       quizStartedAtRef.current = Date.now();
@@ -551,26 +866,7 @@ Output strictly as JSON without markdown:
 
     activeQuiz.questions.forEach((q) => {
       const selected = userAnswers[q.id] || [];
-      let pts = 0;
-      let isCorrect = false;
-
-      if (q.type === 'text') {
-        const userText = (selected[0] || '').trim().toLowerCase();
-        if (q.correctAnswers.some((ans) => userText.includes(ans.toLowerCase()))) {
-          pts = 1.0;
-          isCorrect = true;
-        }
-      } else {
-        const correctCount = selected.filter((a) => q.correctAnswers.includes(a)).length;
-        const wrongCount = selected.filter((a) => !q.correctAnswers.includes(a)).length;
-
-        if (correctCount === q.correctAnswers.length && wrongCount === 0) {
-          pts = 1.0;
-          isCorrect = true;
-        } else if (quizScoringMode === 'partial' && correctCount > 0) {
-          pts = 0.5;
-        }
-      }
+      const { points: pts, isCorrect } = scoreQuizQuestion(q, selected, quizScoringMode);
 
       scoreTotal += pts;
       reviewDetails.push({
@@ -588,7 +884,7 @@ Output strictly as JSON without markdown:
       });
     });
 
-    const finalScore = Math.round((scoreTotal / activeQuiz.questions.length) * 100);
+    const finalScore = Math.max(0, Math.min(100, Math.round((scoreTotal / activeQuiz.questions.length) * 100)));
     const earnedPoints = calculatePoints(finalScore, 'Standard');
     const elapsedSeconds = quizStartedAtRef.current
       ? Math.max(1, Math.round((Date.now() - quizStartedAtRef.current) / 1000))
@@ -606,7 +902,7 @@ Output strictly as JSON without markdown:
       durationSeconds: elapsedSeconds,
     });
 
-    const fullTitle = `${selectedTag ? selectedTag + ' · ' : ''}${activeQuiz.title}`;
+    const fullTitle = `${activeQuizTag ? activeQuizTag + ' · ' : ''}${activeQuiz.title}`;
 
     const { error } = await supabase.from('test_history').insert({
       user_id: user.id,
@@ -628,6 +924,12 @@ Output strictly as JSON without markdown:
     loadData();
     setQuizResults({ score: finalScore, details: reviewDetails });
     setCurrentView('quiz_results');
+  };
+
+  const handleSubmitQuizAnswer = (questionId: number) => {
+    if (!activeQuiz?.immediateFeedback || submittedQuizQuestionIds.includes(questionId)) return;
+    if (!(userAnswers[questionId] || []).length) return;
+    setSubmittedQuizQuestionIds((current) => current.includes(questionId) ? current : [...current, questionId]);
   };
 
   /* PROGRAMMING HANDLER */
@@ -654,7 +956,9 @@ Output strictly as JSON without markdown:
 You are the Software Construction Professor for ISE (Immersive Software Engineering) at University of Limerick.
 Curriculum Context: ${yearPrompts[currentYear]}
 Difficulty Level: ${progDifficulty}
-Target Tag: ${selectedTag || '#Java_Core'}
+User-suggested Tag (optional): ${selectedTag || 'None'}
+Approved curriculum tags: [${availableTags.join(', ')}]
+Tag audit: Treat the user-suggested tag as a suggestion only. Check it against the attached task specifications/reference slides and the actual programming exercise you generate. Reuse the closest exact approved tag if relevant; otherwise create a concise, specific new tag beginning with # (maximum 25 characters). Do not force an unrelated tag or create a spelling variant. This moderation is required even when the user leaves the tag blank.
 User Custom Title: ${progCustomTitle || 'None'}
 User Focus Prompt: ${progPrompt || 'Practical Java programming challenge'}
 
@@ -692,7 +996,7 @@ Output strictly as JSON without markdown:
     try {
       const data = await callGemini(key, requestParts, progThinkingMode);
 
-      await indexSessionMaterial(
+      const moderatedTag = await indexSessionMaterial(
         progAttachedFiles,
         progCustomTitle,
         data.title,
@@ -700,10 +1004,14 @@ Output strictly as JSON without markdown:
         data.contentVerdict,
         'Programming'
       );
+      if (moderatedTag === null) {
+        throw new Error('This programming exercise material did not pass AI content moderation and cannot be started.');
+      }
 
       if (progCustomTitle.trim()) data.title = progCustomTitle.trim();
 
       setActiveProg(data);
+      setActiveProgTag(moderatedTag);
       setStudentCodeInput(data.starterCode || '// Write Java implementation here\n');
       setIsGenerating(false);
       setActiveModal('none');
@@ -762,7 +1070,7 @@ Output strictly as JSON without markdown:
     try {
       const result = await callGemini(key, evalPrompt, true);
       const earnedPoints = calculatePoints(result.score, progDifficulty);
-      const fullTitle = `${selectedTag ? selectedTag + ' · ' : ''}${activeProg.title}`;
+      const fullTitle = `${activeProgTag ? activeProgTag + ' · ' : ''}${activeProg.title}`;
 
       await supabase.from('test_history').insert({
         user_id: user.id,
@@ -806,8 +1114,9 @@ Output strictly as JSON without markdown:
 You are the ISE Code Tracing Examiner and Academic Gatekeeper for University of Limerick.
 Curriculum: ${yearPrompts[currentYear]}
 Difficulty: ${analysisDifficulty}
-Target Tag: ${selectedTag || 'None'}
-Existing Curriculum Tags in Database: [${availableTags.join(', ')}]
+User-suggested Tag (optional): ${selectedTag || 'None'}
+Approved curriculum tags: [${availableTags.join(', ')}]
+Tag audit: Treat the user-suggested tag as a suggestion only. Inspect the attached code/material and the generated tracing puzzle, then verify the tag is relevant. Reuse the closest exact approved tag if it fits; otherwise create a concise, specific new tag beginning with # (maximum 25 characters). Do not force an unrelated tag or invent spelling variants. This moderation is required even when the user leaves the tag blank.
 User Custom Title: ${analysisCustomTitle || 'None'}
 Context: ${analysisPrompt || 'Nested loop execution drill based on attached materials'}
 
@@ -833,7 +1142,7 @@ Output strictly as JSON without markdown:
     try {
       const data = await callGemini(key, requestParts, analysisThinkingMode);
 
-      await indexSessionMaterial(
+      const moderatedTag = await indexSessionMaterial(
         analysisAttachedFiles,
         analysisCustomTitle,
         data.title,
@@ -841,10 +1150,14 @@ Output strictly as JSON without markdown:
         data.contentVerdict,
         'Code Analysis'
       );
+      if (moderatedTag === null) {
+        throw new Error('This code analysis material did not pass AI content moderation and cannot be started.');
+      }
 
       if (analysisCustomTitle.trim()) data.title = analysisCustomTitle.trim();
 
       setActiveAnalysis(data);
+      setActiveAnalysisTag(moderatedTag);
       setPredictedOutputInput('');
       setScratchpadNotes('');
       setIsGenerating(false);
@@ -886,7 +1199,7 @@ Output strictly as JSON without markdown:
       const result = await callGemini(key, evalPrompt, false);
       const finalScore = isExactMatch ? 100 : result.score;
       const earnedPoints = calculatePoints(finalScore, analysisDifficulty);
-      const fullTitle = `${selectedTag ? selectedTag + ' · ' : ''}${activeAnalysis.title}`;
+      const fullTitle = `${activeAnalysisTag ? activeAnalysisTag + ' · ' : ''}${activeAnalysis.title}`;
 
       await supabase.from('test_history').insert({
         user_id: user.id,
@@ -964,15 +1277,17 @@ Output strictly as JSON without markdown:
         return;
       }
 
-      if (result.tagName) {
-        await handleAddNewTag(result.tagName);
-      }
+      const proposedTag = typeof result.tagName === 'string'
+        ? `#${result.tagName.trim().replace(/^#+/, '').replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 24)}`
+        : '';
+      const normalizedTag = proposedTag.length > 1 ? proposedTag : '#General';
+      const tagName = availableTags.find((tag) => tag.toLocaleLowerCase() === normalizedTag.toLocaleLowerCase()) || normalizedTag;
 
       const { error } = await supabase.from('curriculum_materials').insert({
         submitted_by: user.id,
         submitter_email: user.email,
         title: result.title || 'Lecture Summary',
-        tag_name: result.tagName || '#General',
+        tag_name: tagName,
         content_text: (result.cleanSummary || combinedContent).slice(0, 1600),
         status: result.verdict,
         ai_verdict_reason: result.reason,
@@ -980,8 +1295,11 @@ Output strictly as JSON without markdown:
 
       if (error) throw error;
 
+      if (result.verdict === 'approved') {
+        setAvailableTags((previous) => Array.from(new Set([...previous, tagName])));
+      }
       loadData();
-      setUploadStatus(result.verdict === 'approved' ? `✅ Approved under ${result.tagName}!` : `⚠️ Flagged: ${result.reason}`);
+      setUploadStatus(result.verdict === 'approved' ? `✅ Approved under ${tagName}!` : `⚠️ Flagged: ${result.reason}`);
       setUploadText('');
       setIngestionFiles([]);
     } catch (e: any) {
@@ -1005,7 +1323,7 @@ Output strictly as JSON without markdown:
     setQuizCustomCount('');
     setQuizTimerMinutes(15);
     setQuizCustomTimer('');
-    setQuizTypes({ mcq: true, text: false, single: true });
+    setQuizTypePercentages({ mcq: 75, text: 5, single: 20 });
     setQuizPrompt(
       `Create a focused review quiz only for these weak topics: ${topicList.join(', ')}. Prioritize concepts with the lowest mastery. Use the approved Supabase study materials for the selected tag and do not introduce unrelated topics.`
     );
@@ -1068,6 +1386,10 @@ Output strictly as JSON without markdown:
       }}
       selectedTag={selectedTag}
       quizScoringMode={quizScoringMode}
+      submittedQuestionIds={submittedQuizQuestionIds}
+      currentQuestionIndex={currentQuizQuestionIndex}
+      setCurrentQuestionIndex={setCurrentQuizQuestionIndex}
+      onSubmitAnswer={handleSubmitQuizAnswer}
       onAbandon={() => setCurrentView('station')}
       onSubmit={handleFinishQuiz}
     />
@@ -1165,10 +1487,15 @@ Output strictly as JSON without markdown:
         quizTimerMinutes={quizTimerMinutes} setQuizTimerMinutes={setQuizTimerMinutes}
         quizCustomTimer={quizCustomTimer} setQuizCustomTimer={setQuizCustomTimer}
         quizScoringMode={quizScoringMode} setQuizScoringMode={setQuizScoringMode}
-        quizTypes={quizTypes} setQuizTypes={setQuizTypes}
+        immediateQuizFeedback={immediateQuizFeedback} setImmediateQuizFeedback={setImmediateQuizFeedback}
+        quizTypePercentages={quizTypePercentages} setQuizTypePercentages={setQuizTypePercentages}
+        quizPresets={quizPresets} selectedQuizPresetId={selectedQuizPresetId} quizPresetError={quizPresetError}
+        onCreateQuizPreset={handleCreateQuizPreset} onApplyQuizPreset={handleApplyQuizPreset}
+        onSaveQuizPreset={handleSaveQuizPreset} onRenameQuizPreset={handleRenameQuizPreset}
+        onDeleteQuizPreset={handleDeleteQuizPreset}
         quizThinkingMode={quizThinkingMode} setQuizThinkingMode={setQuizThinkingMode}
         selectedTag={selectedTag} setSelectedTag={setSelectedTag}
-        availableTags={availableTags} onAddNewTag={handleAddNewTag}
+        availableTags={availableTags}
         quizAttachedFiles={quizAttachedFiles} setQuizAttachedFiles={setQuizAttachedFiles}
         quizPrompt={quizPrompt} setQuizPrompt={setQuizPrompt}
         isGenerating={isGenerating} generationError={generationError} onLaunch={handleLaunchQuiz}
@@ -1178,7 +1505,7 @@ Output strictly as JSON without markdown:
         progCustomTitle={progCustomTitle} setProgCustomTitle={setProgCustomTitle}
         progDifficulty={progDifficulty} setProgDifficulty={setProgDifficulty}
         selectedTag={selectedTag} setSelectedTag={setSelectedTag}
-        availableTags={availableTags} onAddNewTag={handleAddNewTag}
+        availableTags={availableTags}
         progAttachedFiles={progAttachedFiles} setProgAttachedFiles={setProgAttachedFiles}
         progPrompt={progPrompt} setProgPrompt={setProgPrompt}
         isGenerating={isGenerating} onLaunch={handleLaunchProgramming}
@@ -1188,7 +1515,7 @@ Output strictly as JSON without markdown:
         analysisCustomTitle={analysisCustomTitle} setAnalysisCustomTitle={setAnalysisCustomTitle}
         analysisDifficulty={analysisDifficulty} setAnalysisDifficulty={setAnalysisDifficulty}
         selectedTag={selectedTag} setSelectedTag={setSelectedTag}
-        availableTags={availableTags} onAddNewTag={handleAddNewTag}
+        availableTags={availableTags}
         analysisAttachedFiles={analysisAttachedFiles} setAnalysisAttachedFiles={setAnalysisAttachedFiles}
         analysisPrompt={analysisPrompt} setAnalysisPrompt={setAnalysisPrompt}
         isGenerating={isGenerating} onLaunch={handleLaunchAnalysis}
