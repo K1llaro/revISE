@@ -1529,8 +1529,7 @@ Output strictly as JSON without markdown:
       <AdminModal isOpen={activeModal === 'admin'} onClose={() => setActiveModal('none')} flaggedItems={flaggedItems} onAction={handleAdminAction} />
       <HistoryModal
         isOpen={activeModal === 'history'} onClose={() => setActiveModal('none')}
-        historyList={historyList} studyMaterials={studyMaterials}
-        studyMaterialsError={studyMaterialsError} onStartWeakQuiz={handleStartWeakQuiz}
+        historyList={historyList} onStartWeakQuiz={handleStartWeakQuiz}
       />
       <SettingsModal
         isOpen={activeModal === 'settings'} onClose={() => setActiveModal('none')}

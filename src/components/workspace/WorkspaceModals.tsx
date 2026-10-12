@@ -2,11 +2,11 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   X, Brain, Code2, Bug, Upload, Shield, History, Settings, Cpu, Loader2,
   AlertTriangle, Search, ChevronDown, ChevronUp, CheckCircle2, XCircle,
-  HelpCircle, Calendar, Hash, Plus, Key, User, BarChart3, Trash2, Trophy,
-  EyeOff, Eye, Sparkles, Filter
+  HelpCircle, Calendar, Hash, Plus, Key, User, Trash2, Trophy,
+  EyeOff, Eye, Sparkles, Filter, Download
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-import type { AttachedFile, FlaggedMaterial, StudyYear, TestHistoryItem, QuestionReviewDetail, LeaderboardEntry, UserSession, StudyMaterial } from '../../types/ise';
+import type { AttachedFile, FlaggedMaterial, StudyYear, TestHistoryItem, QuestionReviewDetail, LeaderboardEntry, UserSession } from '../../types/ise';
 import { getGeminiModelUsage } from '../../lib/gemini';
 import { FileDropzone, ApiKeyTooltip } from '../common/LayoutComponents';
 
@@ -1020,10 +1020,8 @@ export const HistoryModal: React.FC<{
   isOpen: boolean;
   onClose: () => void;
   historyList: TestHistoryItem[];
-  studyMaterials: StudyMaterial[];
-  studyMaterialsError: string | null;
   onStartWeakQuiz: (topics: Array<{ topic: string; tagName: string }>) => void;
-}> = ({ isOpen, onClose, historyList, studyMaterials, studyMaterialsError, onStartWeakQuiz }) => {
+}> = ({ isOpen, onClose, historyList, onStartWeakQuiz }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [aiModelUsage, setAiModelUsage] = useState(() => getGeminiModelUsage());
@@ -1059,6 +1057,41 @@ export const HistoryModal: React.FC<{
     }
   };
 
+  const exportHistoryDetails = (item: TestHistoryItem) => {
+    if (!item.details?.length) return;
+    const lines = [
+      item.title,
+      `${item.type} · ${item.score}/${item.maxScore} · ${item.pointsEarned || 0} Exp`,
+      `Date: ${item.rawDate ? new Date(item.rawDate).toLocaleString() : item.date}`,
+      `Time: ${item.timeSpent}`,
+      '',
+      item.weakSpotsAdvice ? `Study advice: ${item.weakSpotsAdvice}` : '',
+      '',
+      ...item.details.flatMap((detail, index) => [
+        `Question ${index + 1}${detail.topic ? ` · ${detail.topic}` : ''}`,
+        detail.questionText,
+        detail.codeSnippet ? `Code:\n${detail.codeSnippet}` : '',
+        `Your answer: ${detail.userAnswer.join(', ') || 'No answer'}`,
+        `Correct answer${detail.correctAnswers.length === 1 ? '' : 's'}: ${detail.correctAnswers.join(', ') || 'Not available'}`,
+        `Result: ${detail.isCorrect ? 'Correct' : 'Incorrect'} · ${detail.points} pts`,
+        detail.slideTitle ? `Study material: ${detail.slideTitle}` : '',
+        `Explanation: ${detail.explanation || 'No explanation saved.'}`,
+        detail.responseTimeSeconds !== undefined ? `Response time: ${detail.responseTimeSeconds}s` : '',
+        '',
+      ].filter(Boolean)),
+    ].filter(Boolean);
+    const file = new Blob([`\uFEFF${lines.join('\r\n')}`], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(file);
+    const anchor = document.createElement('a');
+    const safeTitle = item.title.replace(/[<>:"/\\|?*\x00-\x1F]/g, '_').trim().slice(0, 80) || 'quiz';
+    anchor.href = url;
+    anchor.download = `${safeTitle}-details.txt`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
   const handleStartDateChange = (newStart: string) => {
     setStartDate(newStart);
     if (rangePreset !== 'custom') {
@@ -1068,40 +1101,6 @@ export const HistoryModal: React.FC<{
       setEndDate(d.toISOString().split('T')[0]);
     }
   };
-
-  const chartDays = useMemo(() => {
-    const days = [];
-    const curr = new Date(startDate);
-    const end = new Date(endDate);
-
-    let limit = 0;
-    while (curr <= end && limit < 40) {
-      const dateStr = curr.toISOString().split('T')[0];
-      const itemsOnDay = historyList.filter((h) => h.rawDate?.startsWith(dateStr));
-
-      const quizItems = itemsOnDay.filter((i) => i.type.toLowerCase().includes('quiz'));
-      const codeItems = itemsOnDay.filter((i) => i.type.toLowerCase().includes('code'));
-      const analysisItems = itemsOnDay.filter((i) => i.type.toLowerCase().includes('analysis') || i.type.toLowerCase().includes('tracing'));
-
-      const avgQuiz = quizItems.length > 0 ? Math.round(quizItems.reduce((acc, q) => acc + q.score, 0) / quizItems.length) : 0;
-      const avgCode = codeItems.length > 0 ? Math.round(codeItems.reduce((acc, c) => acc + c.score, 0) / codeItems.length) : 0;
-      const avgAnalysis = analysisItems.length > 0 ? Math.round(analysisItems.reduce((acc, a) => acc + a.score, 0) / analysisItems.length) : 0;
-
-      days.push({
-        dateStr,
-        displayDate: `${String(curr.getDate()).padStart(2, '0')}/${String(curr.getMonth() + 1).padStart(2, '0')}`,
-        quizScore: avgQuiz,
-        codeScore: avgCode,
-        analysisScore: avgAnalysis,
-        totalTests: itemsOnDay.length,
-        items: itemsOnDay,
-      });
-
-      curr.setDate(curr.getDate() + 1);
-      limit++;
-    }
-    return days;
-  }, [startDate, endDate, historyList]);
 
   const filteredHistory = useMemo(() => {
     if (!searchQuery.trim()) return historyList;
@@ -1186,30 +1185,6 @@ export const HistoryModal: React.FC<{
     ? Math.round(mcqResponseTimes.reduce((total, seconds) => total + seconds, 0) / mcqResponseTimes.length)
     : null;
 
-  const materialStats = useMemo(() => {
-    const covered = new Set<string>();
-    const problemSlides = new Map<string, number>();
-    historyList.forEach((item) => item.details?.forEach((detail) => {
-      const title = detail.slideTitle?.toLowerCase();
-      const material = title && studyMaterials.find((entry) =>
-        entry.title.toLowerCase() === title || entry.summary.toLowerCase().includes(title)
-      );
-      if (material && detail.slideTitle) {
-        covered.add(material.title);
-        if (!detail.isCorrect) problemSlides.set(detail.slideTitle, (problemSlides.get(detail.slideTitle) || 0) + 1);
-      }
-    }));
-    return {
-      coveredCount: covered.size,
-      totalCount: studyMaterials.length,
-      problemSlides: Array.from(problemSlides, ([title, errors]) => ({ title, errors }))
-        .sort((a, b) => b.errors - a.errors)
-        .slice(0, 5),
-    };
-  }, [historyList, studyMaterials]);
-
-  const trendDays = chartDays.filter((day) => day.totalTests > 0);
-
   if (!isOpen) return null;
 
   return (
@@ -1218,7 +1193,10 @@ export const HistoryModal: React.FC<{
         <div className="flex justify-between items-center border-b border-white/10 pb-4 shrink-0">
           <div className="flex items-center gap-2.5">
             <History className="h-5 w-5 text-[#3ccb57] shrink-0" />
-            <h3 className="text-base sm:text-lg font-bold text-white">History &amp; Statistics</h3>
+            <div>
+              <h3 className="text-base sm:text-lg font-bold text-white">History &amp; Statistics</h3>
+              <p className="mt-0.5 text-[10px] text-slate-500">Detailed quiz answers are kept for 14 days. Export them from an expanded result to keep a copy.</p>
+            </div>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-white p-1 cursor-pointer"><X className="h-5 w-5" /></button>
         </div>
@@ -1392,7 +1370,16 @@ export const HistoryModal: React.FC<{
 
                       {h.details && h.details.length > 0 && (
                         <div className="space-y-2.5">
-                          <span className="text-xs font-bold text-slate-300 uppercase tracking-wider block">Question-by-Question Breakdown:</span>
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">Question-by-Question Breakdown:</span>
+                            <button
+                              type="button"
+                              onClick={() => exportHistoryDetails(h)}
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1.5 text-[10px] font-semibold text-slate-300 transition hover:border-emerald-400/30 hover:bg-emerald-400/[0.06] hover:text-emerald-200"
+                            >
+                              <Download className="h-3.5 w-3.5" /> Export full details (.txt)
+                            </button>
+                          </div>
                           {h.details.map((q, qIdx) => (
                             <div key={qIdx} className={`p-3.5 rounded-xl border ${q.isCorrect ? 'border-[#3ccb57]/30 bg-[#3ccb57]/5' : 'border-red-500/30 bg-red-950/20'} space-y-2 text-xs`}>
                               <div className="flex justify-between items-center font-mono">
@@ -1458,76 +1445,44 @@ export const HistoryModal: React.FC<{
                 Less <span className="h-2.5 w-2.5 rounded-sm bg-white/[0.07]" /><span className="h-2.5 w-2.5 rounded-sm bg-red-500/60" /><span className="h-2.5 w-2.5 rounded-sm bg-amber-500/70" /><span className="h-2.5 w-2.5 rounded-sm bg-lime-500/80" /><span className="h-2.5 w-2.5 rounded-sm bg-[#3ccb57]" /> More
               </div>
 
-              <div className="border-t border-white/10 pt-3">
-                <h5 className="text-xs font-bold text-slate-200 mb-2">Top Areas to Improve</h5>
-                {weakAreas.length === 0 ? (
-                  <p className="text-[11px] text-slate-500">Complete quizzes with question breakdowns to discover topics to revisit.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {weakAreas.map((area) => (
-                      <div key={`${area.tagName}:${area.topic}`} className="flex items-center gap-3 text-xs">
-                        <span className="min-w-0 flex-1 truncate text-slate-200" title={`${area.tagName} · ${area.topic}`}>{area.topic}</span>
-                        <span className="text-[10px] text-slate-500">{area.tagName}</span>
-                        <span className="font-mono text-amber-300">{area.mastery}%</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
             </section>
 
             <section className="p-4 sm:p-5 rounded-2xl bg-[#030714] border border-white/10 space-y-3">
-              <h4 className="text-sm font-bold text-white flex items-center gap-2"><BarChart3 className="h-4 w-4 text-sky-400" /> Performance trend</h4>
-              <p className="text-[11px] text-slate-400">Average score on practice days in the selected date range</p>
-              {trendDays.length === 0 ? (
-                <p className="text-xs text-slate-500 py-3">No completed activities in this date range.</p>
+              <div>
+                <h4 className="text-sm font-bold text-white">Topics to revisit</h4>
+                <p className="text-[11px] text-slate-400 mt-1">Prioritized by your lowest accuracy in answered questions.</p>
+              </div>
+              {weakAreas.length === 0 ? (
+                <p className="text-xs text-slate-500 py-2">Complete quizzes with question breakdowns to see which topics need more practice.</p>
               ) : (
-                <div className="flex items-end gap-1 h-24 border-b border-white/10">
-                  {trendDays.map((day) => {
-                    const average = Math.round(
-                      day.items.reduce((total, item) => total + (item.maxScore > 0 ? (item.score / item.maxScore) * 100 : 0), 0) / day.totalTests
-                    );
+                <div className="space-y-3">
+                  {weakAreas.map((area) => {
+                    const accuracyColor = area.mastery < 40 ? 'text-red-300' : area.mastery < 70 ? 'text-amber-300' : 'text-[#3ccb57]';
                     return (
-                      <div key={day.dateStr} className="group relative flex-1 h-full flex items-end">
-                        <div title={`${day.displayDate}: ${average}%`} style={{ height: `${Math.max(average, 4)}%` }} className="w-full rounded-t-sm bg-gradient-to-t from-sky-700 to-sky-400 group-hover:from-[#3ccb57] group-hover:to-lime-300 transition-colors" />
+                      <div key={`${area.tagName}:${area.topic}`} className="rounded-xl border border-white/5 bg-white/[0.02] p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="truncate text-xs font-semibold text-slate-200" title={area.topic}>{area.topic}</p>
+                            <p className="mt-1 text-[10px] text-slate-500">{area.tagName} · {area.total - area.correct} missed of {area.total}</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => onStartWeakQuiz([{ topic: area.topic, tagName: area.tagName }])}
+                            className="shrink-0 rounded-lg border border-[#3ccb57]/30 px-2.5 py-1 text-[10px] font-bold text-[#3ccb57] transition hover:bg-[#3ccb57]/10"
+                          >
+                            Practice
+                          </button>
+                        </div>
+                        <div className="mt-2 flex items-center gap-2">
+                          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10">
+                            <div style={{ width: `${area.mastery}%` }} className={`h-full rounded-full ${area.mastery < 40 ? 'bg-red-400' : area.mastery < 70 ? 'bg-amber-400' : 'bg-[#3ccb57]'}`} />
+                          </div>
+                          <span className={`w-9 text-right font-mono text-[10px] ${accuracyColor}`}>{area.mastery}%</span>
+                        </div>
                       </div>
                     );
                   })}
                 </div>
-              )}
-              {trendDays.length > 0 && <div className="flex justify-between text-[10px] text-slate-500"><span>{trendDays[0].displayDate}</span><span>{trendDays[trendDays.length - 1].displayDate}</span></div>}
-            </section>
-
-            <section className="p-4 sm:p-5 rounded-2xl bg-[#030714] border border-white/10 space-y-3">
-              <h4 className="text-sm font-bold text-white">Slide Analytics</h4>
-              {studyMaterialsError ? (
-                <p className="text-xs text-red-300">Could not load approved study materials: {studyMaterialsError}</p>
-              ) : (
-                <>
-                  <div className="flex justify-between text-xs">
-                    <span className="text-slate-300">Material coverage</span>
-                    <strong className="text-[#3ccb57]">{materialStats.totalCount ? `${Math.round((materialStats.coveredCount / materialStats.totalCount) * 100)}%` : '—'}</strong>
-                  </div>
-                  <div className="h-2 rounded-full bg-white/10 overflow-hidden">
-                    <div style={{ width: `${materialStats.totalCount ? (materialStats.coveredCount / materialStats.totalCount) * 100 : 0}%` }} className="h-full bg-[#3ccb57] rounded-full" />
-                  </div>
-                  <p className="text-[10px] text-slate-500">{materialStats.coveredCount} of {materialStats.totalCount} approved materials linked to answered questions.</p>
-                  <div className="border-t border-white/10 pt-3">
-                    <h5 className="text-xs font-bold text-slate-200 mb-2">Problem slides</h5>
-                    {materialStats.problemSlides.length === 0 ? (
-                      <p className="text-[11px] text-slate-500">{studyMaterials.length ? 'No incorrect answers are linked to these materials yet.' : 'No approved slide summaries found in Supabase yet.'}</p>
-                    ) : (
-                      <div className="space-y-2">
-                        {materialStats.problemSlides.map((slide) => (
-                          <div key={slide.title} className="flex justify-between gap-3 text-xs">
-                            <span className="truncate text-slate-300" title={slide.title}>{slide.title}</span>
-                            <span className="shrink-0 text-red-300">{slide.errors} incorrect</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </>
               )}
             </section>
 
@@ -1553,7 +1508,16 @@ export const HistoryModal: React.FC<{
                   {[...aiModelUsage].sort((a, b) => b.lastUsedAt.localeCompare(a.lastUsedAt)).map((model) => (
                     <div key={model.modelName} className="flex items-center justify-between gap-3 text-xs">
                       <span className="min-w-0 truncate font-mono text-slate-300">{model.modelName}</span>
-                      <span className="shrink-0 text-slate-500">Last used {new Date(model.lastUsedAt).toLocaleDateString()}</span>
+                      <span className="shrink-0 text-slate-500">
+                        Last used {new Date(model.lastUsedAt).toLocaleString(undefined, {
+                          month: '2-digit',
+                          day: '2-digit',
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          hourCycle: 'h23',
+                        })}
+                      </span>
                     </div>
                   ))}
                 </div>

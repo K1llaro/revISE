@@ -25,6 +25,7 @@ interface LearnNote {
   id: string;
   title: string;
   content_text: string;
+  curriculum_material_id?: string | null;
   source_name: string | null;
   created_at: string;
   terms: NoteTerm[];
@@ -428,6 +429,7 @@ export const LearnWorkspace: React.FC<{
   const [isNotebookFullscreen, setIsNotebookFullscreen] = useState(false);
   const [notebookLayoutMode, setNotebookLayoutMode] = useState<'simple' | 'advanced'>('simple');
   const [composerCollapsed, setComposerCollapsed] = useState(false);
+  const [noteCreationMode, setNoteCreationMode] = useState<'manual' | 'ai'>('ai');
   const [bookPageIndex, setBookPageIndex] = useState(0);
   const [notebookPageTarget, setNotebookPageTarget] = useState(1250);
   const [bookTurnDirection, setBookTurnDirection] = useState<'next' | 'previous'>('next');
@@ -454,6 +456,8 @@ export const LearnWorkspace: React.FC<{
   const [isAddingCategory, setIsAddingCategory] = useState(false);
   const [isAddingSection, setIsAddingSection] = useState(false);
   const [composerText, setComposerText] = useState('');
+  const [manualNoteTitle, setManualNoteTitle] = useState('');
+  const [manualNoteText, setManualNoteText] = useState('');
   const [summaryMode, setSummaryMode] = useState<SummaryModeId>('expanded');
   const [visualHintsEnabled, setVisualHintsEnabled] = useState(true);
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
@@ -586,7 +590,7 @@ export const LearnWorkspace: React.FC<{
     const loadNotes = async () => {
       const { data, error } = await supabase
         .from('learn_notes')
-        .select('id, title, content_text, source_name, created_at, terms')
+        .select('id, title, content_text, curriculum_material_id, source_name, created_at, terms, linked_material:curriculum_materials(content_text)')
         .eq('user_id', user.id)
         .eq('section_id', selectedSectionId)
         .order('created_at', { ascending: true });
@@ -594,7 +598,11 @@ export const LearnWorkspace: React.FC<{
       if (!cancelled) {
         setNotes((data || []).map((note) => ({
           ...note,
-          content_text: typeof note.content_text === 'string' ? note.content_text : '',
+          content_text: typeof note.content_text === 'string'
+            ? note.content_text
+            : typeof note.linked_material?.content_text === 'string'
+              ? note.linked_material.content_text
+              : '',
           terms: Array.isArray(note.terms) ? note.terms : [],
         })) as LearnNote[]);
       }
@@ -788,15 +796,31 @@ Return JSON only:
       const title = typeof result.title === 'string' && result.title.trim()
         ? result.title.trim().slice(0, 160)
         : note.title;
+      if (note.curriculum_material_id) {
+        const { error: materialError } = await supabase
+          .from('curriculum_materials')
+          .update({ title, content_text: summary })
+          .eq('id', note.curriculum_material_id)
+          .eq('submitted_by', user.id);
+        if (materialError) throw materialError;
+      }
       const { data, error } = await supabase
         .from('learn_notes')
-        .update({ title, content_text: summary, terms: normalizedTerms })
+        .update({
+          title,
+          ...(note.curriculum_material_id ? {} : { content_text: summary }),
+          terms: normalizedTerms,
+        })
         .eq('id', note.id)
         .eq('user_id', user.id)
-        .select('id, title, content_text, source_name, created_at, terms')
+        .select('id, title, content_text, curriculum_material_id, source_name, created_at, terms')
         .single();
       if (error) throw error;
-      setNotes((current) => current.map((item) => item.id === note.id ? data as LearnNote : item));
+      setNotes((current) => current.map((item) => item.id === note.id ? {
+        ...data,
+        content_text: note.curriculum_material_id ? summary : data.content_text,
+        terms: Array.isArray(data.terms) ? data.terms : [],
+      } as LearnNote : item));
       setStatus(`Regenerated "${title}" from the saved note. Original files are not retained in Learn.`);
     } catch (error) {
       setStatus(`Could not regenerate note: ${getSupabaseErrorMessage(error)}`);
@@ -934,6 +958,55 @@ Learn notes (summaries of the uploaded course slides):
       setStatus(null);
     } catch (error) {
       setStatus(`Could not read attachment: ${error instanceof Error ? error.message : 'Unknown file error'}`);
+    }
+  };
+
+  const saveManualNote = async () => {
+    if (!selectedSectionId || !activeSection) {
+      setStatus('Create or select a section before adding a note.');
+      return;
+    }
+    const content = manualNoteText.trim();
+    if (!content) {
+      setStatus('Write your note before saving.');
+      return;
+    }
+    if (content.length > 18000) {
+      setStatus('This note is too long to save. Keep it within 18,000 characters.');
+      return;
+    }
+
+    setIsSaving(true);
+    setStatus('Saving your personal note…');
+    try {
+      const title = manualNoteTitle.trim().slice(0, 160) || `Notes — ${activeSection.name}`;
+      const { data, error } = await supabase
+        .from('learn_notes')
+        .insert({
+          user_id: user.id,
+          section_id: selectedSectionId,
+          title,
+          content_text: content,
+          curriculum_material_id: null,
+          source_name: null,
+          terms: [],
+        })
+        .select('id, title, content_text, source_name, created_at, terms')
+        .single();
+      if (error) throw error;
+
+      setNotes((current) => [...current, {
+        ...data,
+        content_text: typeof data.content_text === 'string' ? data.content_text : '',
+        terms: Array.isArray(data.terms) ? data.terms : [],
+      } as LearnNote]);
+      setManualNoteTitle('');
+      setManualNoteText('');
+      setStatus('Saved to your private Learn notebook. No AI processing or shared curriculum submission was used.');
+    } catch (error) {
+      setStatus(`Could not save personal note: ${getSupabaseErrorMessage(error)}`);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -1090,13 +1163,25 @@ Return JSON only:
           user_id: user.id,
           section_id: selectedSectionId,
           title: moderationTitle,
-          content_text: summary,
+          content_text: null,
+          curriculum_material_id: curriculumMaterial.id,
           source_name: sourceNames.join(', ').slice(0, 500) || null,
           terms,
         })
-        .select('id, title, content_text, source_name, created_at, terms')
+        .select('id, title, content_text, curriculum_material_id, source_name, created_at, terms')
         .single();
       if (error) {
+        if (error.code === '23502' && error.message.includes('content_text')) {
+          const { error: rollbackError } = await supabase
+            .from('curriculum_materials')
+            .delete()
+            .eq('id', curriculumMaterial.id)
+            .eq('submitted_by', user.id);
+          const rollbackMessage = rollbackError
+            ? ` The shared curriculum copy could not be removed automatically (${rollbackError.message}).`
+            : '';
+          throw new Error(`The Learn-to-curriculum deduplication migration is missing. Run supabase/learn-note-content-dedup.sql in Supabase SQL Editor, then try again.${rollbackMessage}`);
+        }
         if (error.code === '23514' && error.message.includes('learn_notes_content_text_check')) {
           const { error: rollbackError } = await supabase
             .from('curriculum_materials')
@@ -1119,7 +1204,7 @@ Return JSON only:
         throw error;
       }
 
-      setNotes((current) => [...current, data as LearnNote]);
+      setNotes((current) => [...current, { ...data, content_text: summary } as LearnNote]);
       setComposerText('');
       setAttachedFiles([]);
       setStatus(`Approved and saved privately. A compact summary was also added to the shared curriculum as ${tagName}. Original files were not stored. ${tagWarning}`);
@@ -1680,7 +1765,11 @@ Return JSON only:
             {composerCollapsed ? (
               <div className="flex items-center justify-between gap-3">
                 <span className="truncate text-[11px] text-slate-500">
-                  {attachedFiles.length > 0 ? `${attachedFiles.length} attachment${attachedFiles.length === 1 ? '' : 's'} ready` : 'Prompt area minimized'}
+                  {noteCreationMode === 'manual'
+                    ? `Manual note · ${manualNoteText.length.toLocaleString()} characters`
+                    : attachedFiles.length > 0
+                      ? `${attachedFiles.length} attachment${attachedFiles.length === 1 ? '' : 's'} ready`
+                      : 'AI note prompt minimized'}
                 </span>
                 <button
                   type="button"
@@ -1694,6 +1783,36 @@ Return JSON only:
               </div>
             ) : (
               <>
+            <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-[11px] font-semibold text-slate-300">Create note</p>
+                <p className="mt-0.5 text-[10px] text-slate-500">
+                  {noteCreationMode === 'manual'
+                    ? 'Private note · no AI processing or shared submission'
+                    : 'AI summarizes and moderates your material before saving'}
+                </p>
+              </div>
+              <div className="inline-flex self-start rounded-lg border border-white/10 bg-black/20 p-0.5" role="group" aria-label="Note creation method">
+                <button
+                  type="button"
+                  aria-pressed={noteCreationMode === 'manual'}
+                  disabled={isSaving}
+                  onClick={() => { setNoteCreationMode('manual'); setStatus(null); }}
+                  className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[11px] font-medium transition-colors disabled:opacity-50 ${noteCreationMode === 'manual' ? 'bg-white/[0.12] text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
+                >
+                  <Pencil className="h-3.5 w-3.5" /> Write manually
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={noteCreationMode === 'ai'}
+                  disabled={isSaving}
+                  onClick={() => { setNoteCreationMode('ai'); setStatus(null); }}
+                  className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[11px] font-medium transition-colors disabled:opacity-50 ${noteCreationMode === 'ai' ? 'bg-white/[0.12] text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
+                >
+                  <BookOpen className="h-3.5 w-3.5" /> Use AI
+                </button>
+              </div>
+            </div>
             <div className="mb-2 flex items-center justify-end">
               <button
                 type="button"
@@ -1706,6 +1825,43 @@ Return JSON only:
                 <Minus className="h-4 w-4" />
               </button>
             </div>
+            {noteCreationMode === 'manual' ? (
+              <div className="space-y-2 rounded-2xl border border-white/[0.12] bg-[#1c1c1c] p-3 shadow-lg focus-within:border-white/25">
+                <input
+                  type="text"
+                  value={manualNoteTitle}
+                  onChange={(event) => setManualNoteTitle(event.target.value)}
+                  placeholder="Note title (optional)"
+                  maxLength={160}
+                  disabled={!activeSection || isSaving}
+                  aria-label="Manual note title"
+                  className="w-full rounded-lg border border-white/[0.08] bg-black/20 px-3 py-2 text-sm font-medium text-slate-100 placeholder:text-slate-600 outline-none focus:border-emerald-400/30 disabled:opacity-50"
+                />
+                <textarea
+                  value={manualNoteText}
+                  onChange={(event) => setManualNoteText(event.target.value)}
+                  placeholder={activeSection ? `Write your notes for ${activeSection.name}… Markdown is supported.` : 'Create a subject and section before adding notes'}
+                  disabled={!activeSection || isSaving}
+                  maxLength={18000}
+                  rows={5}
+                  aria-label="Manual note content"
+                  className="w-full resize-y rounded-lg bg-transparent px-1 py-1 text-sm leading-6 text-slate-200 placeholder:text-slate-600 outline-none disabled:cursor-not-allowed"
+                />
+                <div className="flex flex-col gap-2 border-t border-white/[0.08] pt-2 sm:flex-row sm:items-center sm:justify-between">
+                  <span className="text-[10px] text-slate-600">{manualNoteText.length.toLocaleString()} / 18,000 characters · Markdown supported</span>
+                  <button
+                    type="button"
+                    onClick={() => void saveManualNote()}
+                    disabled={!activeSection || isSaving || !manualNoteText.trim()}
+                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-semibold text-black hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                    <span>{isSaving ? 'Saving…' : 'Save personal note'}</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
             {attachedFiles.length > 0 && (
               <div className="flex flex-wrap gap-2 mb-2">
                 {attachedFiles.map((file, index) => (
@@ -1775,6 +1931,8 @@ Return JSON only:
                 Visual hints: {visualHintsEnabled ? 'On' : 'Off'}
               </button>
             </div>
+              </>
+            )}
             {status && <p className={`mt-2 text-[11px] ${status.startsWith('Could not') || status.startsWith('Not saved') || status.startsWith('Add your') ? 'text-amber-300' : 'text-slate-500'}`}>{status}</p>}
               </>
             )}
