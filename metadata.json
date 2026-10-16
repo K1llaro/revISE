@@ -1,0 +1,8 @@
+{
+  "name": "revISE",
+  "description": "Interactive study and revision station for University of Limerick Immersive Software Engineering students featuring dynamic quizzes, notes, and curriculum materials.",
+  "permissions": [],
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

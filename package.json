@@ -6,7 +6,8 @@
     "node": ">=22.12.0"
   },
   "scripts": {
-    "dev": "concurrently -k \"astro dev\" \"node --env-file-if-exists=.env --import tsx api/local-server.ts\"",
+    "dev": "astro dev --host 0.0.0.0 --port 3000",
+    "start": "node ./dist/server/entry.mjs",
     "build": "astro build",
     "preview": "astro preview",
     "astro": "astro",
@@ -16,6 +17,7 @@
     "migrate:turso": "node scripts/migrate-supabase-to-turso.mjs"
   },
   "dependencies": {
+    "@astrojs/node": "^11.1.8",
     "@astrojs/react": "^7.0.0",
     "@aws-sdk/client-secrets-manager": "^3.1149.0",
     "@libsql/client": "^0.17.4",

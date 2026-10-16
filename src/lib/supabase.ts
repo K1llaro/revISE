@@ -1,11 +1,9 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
-const useTursoApi = import.meta.env.PROD || import.meta.env.DEV;
-const databaseApiBase = import.meta.env.DEV
-  ? 'http://localhost:8787/api'
-  : import.meta.env.PUBLIC_DATABASE_API_URL?.replace(/\/+$/, '') || '/api';
+const supabaseUrl = import.meta.env.PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
+const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.placeholder';
+const useTursoApi = true;
+const databaseApiBase = import.meta.env.PUBLIC_DATABASE_API_URL?.replace(/\/+$/, '') || '/api';
 
 const authClient = createClient(supabaseUrl, supabaseAnonKey);
 

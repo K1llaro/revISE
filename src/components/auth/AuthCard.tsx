@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { ShieldCheck, AlertTriangle, Loader2 } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { ShieldCheck, AlertTriangle, Loader2, ExternalLink } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import type { UserSession } from '../../types/ise';
 
@@ -9,6 +9,8 @@ export const AuthCard: React.FC<{
 }> = ({ securityError }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const popupRef = useRef<Window | null>(null);
+  const checkIntervalRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (securityError) {
@@ -16,24 +18,88 @@ export const AuthCard: React.FC<{
     }
   }, [securityError]);
 
-  // 🐙 Авторизация через GitHub с запросом доступа к закрытым подтвержденным адресам
+  useEffect(() => {
+    const handleMessage = async (event: MessageEvent) => {
+      if (event.data?.type === 'OAUTH_AUTH_SUCCESS') {
+        setIsSubmitting(false);
+        setStatusMessage(null);
+        if (popupRef.current && !popupRef.current.closed) {
+          popupRef.current.close();
+        }
+        if (checkIntervalRef.current) {
+          window.clearInterval(checkIntervalRef.current);
+          checkIntervalRef.current = null;
+        }
+        await supabase.auth.getSession();
+      } else if (event.data?.type === 'OAUTH_AUTH_ERROR') {
+        setIsSubmitting(false);
+        setStatusMessage(`Sign-in error: ${event.data.error || 'Failed to authenticate.'}`);
+        if (checkIntervalRef.current) {
+          window.clearInterval(checkIntervalRef.current);
+          checkIntervalRef.current = null;
+        }
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => {
+      window.removeEventListener('message', handleMessage);
+      if (checkIntervalRef.current) {
+        window.clearInterval(checkIntervalRef.current);
+      }
+    };
+  }, []);
+
+  // 🐙 Авторизация через GitHub в отдельном всплывающем окне (popup)
   const handleGitHubSignIn = async () => {
     setIsSubmitting(true);
     setStatusMessage(null);
 
     try {
+      const redirectUri = `${window.location.origin}/auth/callback`;
+
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'github',
         options: {
           scopes: 'read:user user:email',
-          redirectTo: typeof window !== 'undefined' ? `${window.location.origin}` : undefined,
+          redirectTo: redirectUri,
           skipBrowserRedirect: true,
         },
       });
 
       if (error) throw error;
       if (!data.url) throw new Error('GitHub sign-in did not return an authorization URL.');
-      window.location.assign(data.url);
+
+      const width = 600;
+      const height = 750;
+      const left = window.screenX + (window.outerWidth - width) / 2;
+      const top = window.screenY + (window.outerHeight - height) / 2;
+
+      const popup = window.open(
+        data.url,
+        'github_oauth_popup',
+        `width=${width},height=${height},left=${left},top=${top},status=no,toolbar=no,menubar=no,resizable=yes,scrollbars=yes`
+      );
+
+      if (!popup || popup.closed || typeof popup.closed === 'undefined') {
+        setIsSubmitting(false);
+        setStatusMessage('The login popup was blocked by your browser. Please allow popups for this site and try again.');
+        return;
+      }
+
+      popupRef.current = popup;
+
+      if (checkIntervalRef.current) window.clearInterval(checkIntervalRef.current);
+      checkIntervalRef.current = window.setInterval(async () => {
+        if (popup.closed) {
+          if (checkIntervalRef.current) {
+            window.clearInterval(checkIntervalRef.current);
+            checkIntervalRef.current = null;
+          }
+          setIsSubmitting(false);
+          await supabase.auth.getSession();
+        }
+      }, 700);
     } catch (error) {
       setIsSubmitting(false);
       console.error('Could not start GitHub sign-in.', error);
@@ -82,7 +148,7 @@ export const AuthCard: React.FC<{
         {isSubmitting ? (
           <>
             <Loader2 className="h-4 w-4 animate-spin text-[#3ccb57]" />
-            <span>Connecting to GitHub...</span>
+            <span>Waiting for login in popup...</span>
           </>
         ) : (
           <>
@@ -90,6 +156,7 @@ export const AuthCard: React.FC<{
               <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02_0 0024 12c0-6.63-5.37-12-12-12z" />
             </svg>
             <span>Continue with GitHub</span>
+            <ExternalLink className="h-3.5 w-3.5 text-slate-400 ml-auto" />
           </>
         )}
       </button>
