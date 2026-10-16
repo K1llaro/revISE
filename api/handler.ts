@@ -39,8 +39,8 @@ const definitions: Record<TableName, Record<string, ColumnDefinition>> = {
     id: { type: 'text' }, email: { type: 'text' }, nickname: { type: 'text' },
     real_name: { type: 'text', nullable: true }, study_year: { type: 'text' },
     hide_from_leaderboard: { type: 'boolean' }, leaderboard_accepted: { type: 'boolean' },
-    gemini_api_key: { type: 'text', nullable: true }, updated_at: { type: 'text', nullable: true },
-    created_at: { type: 'text' },
+    gemini_api_key: { type: 'text', nullable: true }, avatar_url: { type: 'text', nullable: true },
+    updated_at: { type: 'text', nullable: true }, created_at: { type: 'text' },
   },
   curriculum_materials: {
     id: { type: 'text' }, submitted_by: { type: 'text' }, submitter_email: { type: 'text', nullable: true },
@@ -76,14 +76,14 @@ const privateTables = new Set<TableName>([
   'learn_categories', 'learn_sections', 'learn_notes', 'learn_clarifications',
 ]);
 const mutableColumns: Partial<Record<TableName, Set<string>>> = {
-  profiles: new Set(['nickname', 'real_name', 'hide_from_leaderboard', 'leaderboard_accepted', 'study_year', 'gemini_api_key', 'updated_at']),
+  profiles: new Set(['nickname', 'real_name', 'hide_from_leaderboard', 'leaderboard_accepted', 'study_year', 'gemini_api_key', 'avatar_url', 'updated_at']),
   curriculum_materials: new Set(['title', 'content_text', 'status']),
   learn_categories: new Set(['name']),
   learn_sections: new Set(['name']),
   learn_notes: new Set(['title', 'content_text', 'terms']),
 };
 const publicLeaderboardColumns: Record<TableName, Set<string>> = {
-  profiles: new Set(['id', 'nickname', 'real_name', 'study_year', 'hide_from_leaderboard', 'leaderboard_accepted']),
+  profiles: new Set(['id', 'nickname', 'real_name', 'study_year', 'hide_from_leaderboard', 'leaderboard_accepted', 'avatar_url']),
   test_history: new Set(['user_id', 'score', 'max_score', 'points_earned', 'created_at']),
   curriculum_materials: new Set(),
   learn_categories: new Set(),
@@ -145,16 +145,23 @@ const getDatabase = async (): Promise<Client> => {
   if (cachedDb) return cachedDb;
   const secret = await getSecret();
   cachedDb = createClient({ url: secret.tursoUrl, authToken: secret.tursoAuthToken });
-  if (!schemaInitialized && secret.tursoUrl.startsWith('file:')) {
+  if (!schemaInitialized) {
     schemaInitialized = true;
+    if (secret.tursoUrl.startsWith('file:')) {
+      try {
+        const fs = await import('node:fs/promises');
+        const path = await import('node:path');
+        const schemaPath = path.resolve(process.cwd(), 'api/schema.sql');
+        const schema = await fs.readFile(schemaPath, 'utf8');
+        await cachedDb.executeMultiple(schema);
+      } catch (e) {
+        console.warn('Local SQLite schema initialization notice:', e);
+      }
+    }
     try {
-      const fs = await import('node:fs/promises');
-      const path = await import('node:path');
-      const schemaPath = path.resolve(process.cwd(), 'api/schema.sql');
-      const schema = await fs.readFile(schemaPath, 'utf8');
-      await cachedDb.executeMultiple(schema);
-    } catch (e) {
-      console.warn('Local SQLite schema initialization notice:', e);
+      await cachedDb.execute('ALTER TABLE profiles ADD COLUMN avatar_url TEXT;');
+    } catch {
+      // Column already exists
     }
   }
   return cachedDb;
@@ -251,6 +258,9 @@ const validateValue = (table: TableName, column: string, value: unknown): InValu
     return value;
   }
   if (typeof value !== 'string') throw new HttpError(400, `${column} must be a string.`);
+  if (column === 'avatar_url' && value.length > 50000) {
+    throw new HttpError(400, 'Avatar image is too large. Maximum allowed size is 50 KB.');
+  }
   if (column === 'study_year' && !['year1', 'year2', 'year3', 'year4'].includes(value)) {
     throw new HttpError(400, 'study_year must be one of year1, year2, year3, or year4.');
   }

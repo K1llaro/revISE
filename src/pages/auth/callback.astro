@@ -22,17 +22,18 @@
         text-align: center;
       }
       .card {
-        padding: 2rem;
-        border-radius: 1rem;
-        background: rgba(15, 23, 42, 0.8);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        max-width: 400px;
-        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+        padding: 2.25rem 2rem;
+        border-radius: 1.25rem;
+        background: rgba(15, 23, 42, 0.95);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        max-width: 440px;
+        width: 90%;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
       }
       .spinner {
-        width: 36px;
-        height: 36px;
-        border: 3px solid rgba(60, 203, 87, 0.2);
+        width: 40px;
+        height: 40px;
+        border: 3.5px solid rgba(60, 203, 87, 0.2);
         border-top-color: #3ccb57;
         border-radius: 50%;
         animation: spin 0.8s linear infinite;
@@ -44,47 +45,205 @@
       h2 {
         margin: 0 0 0.5rem;
         font-size: 1.25rem;
+        font-weight: 800;
       }
       p {
         margin: 0;
         font-size: 0.875rem;
         color: #94a3b8;
+        line-height: 1.5;
+      }
+      .error-box {
+        display: none;
+        margin-top: 1rem;
+        padding: 0.75rem 1rem;
+        border-radius: 0.75rem;
+        background: rgba(127, 29, 29, 0.4);
+        border: 1px solid rgba(239, 68, 68, 0.3);
+        color: #fca5a5;
+        font-size: 0.8125rem;
+        text-align: left;
+        word-break: break-word;
+      }
+      .btn {
+        display: inline-block;
+        margin-top: 1.25rem;
+        padding: 0.6rem 1.25rem;
+        border-radius: 0.75rem;
+        background: #3ccb57;
+        color: #000;
+        font-size: 0.8125rem;
+        font-weight: 700;
+        text-decoration: none;
+        cursor: pointer;
+        border: none;
+      }
+      .btn-secondary {
+        background: rgba(255, 255, 255, 0.1);
+        color: #fff;
+        margin-left: 0.5rem;
       }
     </style>
   </head>
   <body>
     <div class="card">
-      <div class="spinner"></div>
-      <h2>Completing sign-in...</h2>
-      <p id="status-text">Synchronizing your session. This window will close automatically.</p>
+      <div id="spinner" class="spinner"></div>
+      <h2 id="title">Completing sign-in...</h2>
+      <p id="status-text">Synchronizing your GitHub session with revISE.</p>
+      <div id="error-box" class="error-box"></div>
+      <div id="actions" style="display: none;">
+        <button id="close-btn" class="btn btn-secondary">Close Window</button>
+      </div>
     </div>
 
     <script>
       import { supabase } from '../../lib/supabase';
 
       const finishAuth = async () => {
-        try {
-          const { data, error } = await supabase.auth.getSession();
-          if (error) {
-            console.warn('Session retrieval note in callback:', error);
+        const statusText = document.getElementById('status-text');
+        const titleEl = document.getElementById('title');
+        const spinner = document.getElementById('spinner');
+        const errorBox = document.getElementById('error-box');
+        const actions = document.getElementById('actions');
+        const closeBtn = document.getElementById('close-btn');
+
+        if (closeBtn) {
+          closeBtn.addEventListener('click', () => window.close());
+        }
+
+        const showError = (message) => {
+          if (spinner) spinner.style.display = 'none';
+          if (titleEl) titleEl.textContent = 'Sign-in Problem';
+          if (statusText) statusText.textContent = 'Could not finish authentication.';
+          if (errorBox) {
+            errorBox.style.display = 'block';
+            errorBox.textContent = message;
           }
+          if (actions) actions.style.display = 'block';
 
           if (window.opener) {
-            window.opener.postMessage({ type: 'OAUTH_AUTH_SUCCESS', session: data?.session }, '*');
-            setTimeout(() => {
-              window.close();
-            }, 300);
-          } else {
-            window.location.href = '/';
+            window.opener.postMessage({ type: 'OAUTH_AUTH_ERROR', error: message }, '*');
           }
+        };
+
+        try {
+          const url = new URL(window.location.href);
+          const searchParams = url.searchParams;
+          const hashString = window.location.hash.replace(/^#/, '');
+          const hashParams = new URLSearchParams(hashString);
+
+          // 1. Проверяем ошибки OAuth от провайдера
+          const errorParam = searchParams.get('error') || hashParams.get('error');
+          const errorDesc = searchParams.get('error_description') || hashParams.get('error_description');
+          if (errorParam || errorDesc) {
+            showError(errorDesc || errorParam || 'Access denied by OAuth provider.');
+            return;
+          }
+
+          let resolved = false;
+
+          const sendSuccess = (payload) => {
+            if (resolved) return;
+            resolved = true;
+            if (statusText) statusText.textContent = 'Success! Returning to revISE...';
+            if (window.opener) {
+              window.opener.postMessage({ type: 'OAUTH_AUTH_SUCCESS', ...payload }, '*');
+              setTimeout(() => {
+                window.close();
+              }, 400);
+            } else {
+              window.location.href = '/';
+            }
+          };
+
+          // 2. Проверяем токены в Hash (Implicit Flow)
+          const hashAccessToken = hashParams.get('access_token');
+          const hashRefreshToken = hashParams.get('refresh_token');
+          const hashProviderToken = hashParams.get('provider_token');
+
+          if (hashAccessToken && hashRefreshToken) {
+            try {
+              const { data: setData } = await supabase.auth.setSession({
+                access_token: hashAccessToken,
+                refresh_token: hashRefreshToken,
+              });
+              sendSuccess({
+                access_token: hashAccessToken,
+                refresh_token: hashRefreshToken,
+                provider_token: hashProviderToken,
+                session: setData?.session,
+              });
+              return;
+            } catch (err) {
+              console.warn('Direct hash setSession note:', err);
+              sendSuccess({
+                access_token: hashAccessToken,
+                refresh_token: hashRefreshToken,
+                provider_token: hashProviderToken,
+              });
+              return;
+            }
+          }
+
+          // 3. Проверяем код авторизации (PKCE Flow)
+          const code = searchParams.get('code');
+          if (code) {
+            // Отправляем код родителю сразу, так как у родительского окна (iframe) есть PKCE verifier в localStorage
+            if (window.opener) {
+              window.opener.postMessage({ type: 'OAUTH_AUTH_CODE', code }, '*');
+            }
+
+            try {
+              const { data: exchangeData, error: exchangeErr } = await supabase.auth.exchangeCodeForSession(code);
+              if (!exchangeErr && exchangeData?.session) {
+                sendSuccess({
+                  session: exchangeData.session,
+                  access_token: exchangeData.session.access_token,
+                  refresh_token: exchangeData.session.refresh_token,
+                  provider_token: exchangeData.session.provider_token,
+                });
+                return;
+              }
+            } catch (err) {
+              console.warn('Popup code exchange note (opener will handle):', err);
+            }
+          }
+
+          // 4. Проверяем активную сессию через Supabase
+          const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+            if (session) {
+              subscription.unsubscribe();
+              sendSuccess({
+                session,
+                access_token: session.access_token,
+                refresh_token: session.refresh_token,
+                provider_token: session.provider_token,
+              });
+            }
+          });
+
+          const { data } = await supabase.auth.getSession();
+          if (data?.session) {
+            subscription.unsubscribe();
+            sendSuccess({
+              session: data.session,
+              access_token: data.session.access_token,
+              refresh_token: data.session.refresh_token,
+              provider_token: data.session.provider_token,
+            });
+            return;
+          }
+
+          // 5. Таймаут: если за 7 секунд ничего не пришло, показываем понятную ошибку, а не закрываем окно молча
+          setTimeout(() => {
+            if (!resolved) {
+              subscription.unsubscribe();
+              showError('Authentication response was not received. Please make sure your Supabase project redirect URLs include this domain and retry.');
+            }
+          }, 7000);
         } catch (err) {
-          console.error('Failed to complete callback:', err);
-          if (window.opener) {
-            window.opener.postMessage({ type: 'OAUTH_AUTH_ERROR', error: String(err) }, '*');
-            setTimeout(() => window.close(), 1000);
-          } else {
-            window.location.href = '/';
-          }
+          console.error('Callback execution failed:', err);
+          showError(err instanceof Error ? err.message : 'Unexpected authentication error.');
         }
       };
 

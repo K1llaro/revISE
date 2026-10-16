@@ -3,12 +3,14 @@ import {
   X, Brain, Code2, Bug, Upload, Shield, History, Settings, Cpu, Loader2,
   AlertTriangle, Search, ChevronDown, ChevronUp, CheckCircle2, XCircle,
   HelpCircle, Calendar, Hash, Plus, Key, User, Trash2, Trophy,
-  EyeOff, Eye, Sparkles, Filter, Download
+  EyeOff, Eye, Sparkles, Filter, Download, Camera, RotateCcw
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import type { AttachedFile, FlaggedMaterial, StudyYear, TestHistoryItem, QuestionReviewDetail, LeaderboardEntry, UserSession } from '../../types/ise';
 import { getGeminiModelUsage } from '../../lib/gemini';
 import { FileDropzone, ApiKeyTooltip } from '../common/LayoutComponents';
+import { UserAvatar } from '../common/UserAvatar';
+import { processAvatarFile, TECH_AVATAR_PRESETS, getAvatarSizeKb } from '../../lib/avatarUtils';
 
 export interface QuizPresetSettings {
   quizCustomTitle: string;
@@ -971,16 +973,21 @@ export const LeaderboardModal: React.FC<{
                           </td>
 
                           <td className="py-3 px-3 sm:px-4">
-                            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                              <span className="font-bold text-white text-xs sm:text-sm">{student.nickname}</span>
-                              <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-white/5 text-slate-400 uppercase border border-white/10">
-                                {student.studyYear}
-                              </span>
-                              {student.isCurrentUser && (
-                                <span className="text-[9px] font-mono text-[#3ccb57] bg-[#3ccb57]/10 px-1.5 py-0.2 rounded font-bold">
-                                  YOU
-                                </span>
-                              )}
+                            <div className="flex items-center gap-2.5">
+                              <UserAvatar avatarUrl={student.avatarUrl} nickname={student.nickname} size="sm" />
+                              <div className="flex flex-col min-w-0">
+                                <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                                  <span className="font-bold text-white text-xs sm:text-sm">{student.nickname}</span>
+                                  <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-white/5 text-slate-400 uppercase border border-white/10">
+                                    {student.studyYear}
+                                  </span>
+                                  {student.isCurrentUser && (
+                                    <span className="text-[9px] font-mono text-[#3ccb57] bg-[#3ccb57]/10 px-1.5 py-0.2 rounded font-bold">
+                                      YOU
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
                             </div>
                           </td>
 
@@ -1572,7 +1579,7 @@ export const SettingsModal: React.FC<{
   isOpen: boolean;
   onClose: () => void;
   user: UserSession;
-  onProfileUpdated: (updates: { nickname?: string; realName?: string; hideFromLeaderboard?: boolean }) => void;
+  onProfileUpdated: (updates: { nickname?: string; realName?: string; hideFromLeaderboard?: boolean; avatarUrl?: string }) => void;
   currentYear: StudyYear;
   onYearChange: (yr: StudyYear) => void;
   apiKeyInput: string;
@@ -1583,6 +1590,10 @@ export const SettingsModal: React.FC<{
   const [editableNickname, setEditableNickname] = useState(user.nickname || '');
   const [editableRealName, setEditableRealName] = useState(user.realName || '');
   const [hideLeaderboard, setHideLeaderboard] = useState(user.hideFromLeaderboard || false);
+  const [currentAvatar, setCurrentAvatar] = useState(user.avatarUrl || '');
+  const [isProcessingAvatar, setIsProcessingAvatar] = useState(false);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
+  const avatarInputRef = useRef<HTMLInputElement | null>(null);
   const [profileMsg, setProfileMsg] = useState<string | null>(null);
 
   const [newPassword, setNewPassword] = useState('');
@@ -1605,6 +1616,7 @@ export const SettingsModal: React.FC<{
       nickname: editableNickname.trim(),
       real_name: editableRealName.trim() || null,
       hide_from_leaderboard: hideLeaderboard,
+      avatar_url: currentAvatar || null,
     }).eq('id', user.id);
 
     if (!error) {
@@ -1612,8 +1624,9 @@ export const SettingsModal: React.FC<{
         nickname: editableNickname.trim(),
         realName: editableRealName.trim() || undefined,
         hideFromLeaderboard: hideLeaderboard,
+        avatarUrl: currentAvatar || undefined,
       });
-      setProfileMsg('Profile settings updated successfully!');
+      setProfileMsg('Profile and avatar updated successfully!');
       setTimeout(() => setProfileMsg(null), 3000);
     } else {
       setProfileMsg('Error updating: ' + error.message);
@@ -1676,6 +1689,121 @@ export const SettingsModal: React.FC<{
               <Settings className="h-5 w-5 text-[#3ccb57]" /> User Settings & Account Controls
             </h3>
             <button onClick={onClose} className="text-slate-400 hover:text-white cursor-pointer"><X className="h-5 w-5" /></button>
+          </div>
+
+          {/* Profile Avatar System */}
+          <div className="p-4 sm:p-5 rounded-xl bg-white/[0.02] border border-white/10 space-y-4">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                <Camera className="h-4 w-4 text-[#3ccb57]" /> Profile Avatar (High-Efficiency Storage)
+              </label>
+              {currentAvatar && (
+                <span className="text-[10px] font-mono text-[#3ccb57] bg-[#3ccb57]/10 px-2 py-0.5 rounded border border-[#3ccb57]/20">
+                  {currentAvatar.startsWith('data:image/svg') ? '< 1 KB (Vector)' : `~${getAvatarSizeKb(currentAvatar)} KB WebP`}
+                </span>
+              )}
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 sm:gap-5">
+              <div className="relative group shrink-0">
+                <UserAvatar avatarUrl={currentAvatar} nickname={editableNickname} size="xl" />
+                <button
+                  type="button"
+                  onClick={() => avatarInputRef.current?.click()}
+                  title="Upload new image"
+                  className="absolute inset-0 rounded-2xl bg-black/60 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center text-white transition-opacity cursor-pointer"
+                >
+                  <Camera className="h-5 w-5 mb-0.5 text-[#3ccb57]" />
+                  <span className="text-[9px] font-bold">Change</span>
+                </button>
+              </div>
+
+              <div className="flex-1 min-w-0 space-y-3 text-left w-full">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <input
+                    ref={avatarInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      setIsProcessingAvatar(true);
+                      setAvatarError(null);
+                      try {
+                        const webpData = await processAvatarFile(file);
+                        setCurrentAvatar(webpData);
+                      } catch (err: any) {
+                        setAvatarError(err?.message || 'Could not process image');
+                      } finally {
+                        setIsProcessingAvatar(false);
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => avatarInputRef.current?.click()}
+                    disabled={isProcessingAvatar}
+                    className="px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-white/10 hover:bg-white/15 text-white border border-white/15 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    {isProcessingAvatar ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin text-[#3ccb57]" />
+                        <span>Compressing WebP...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="h-3.5 w-3.5 text-[#3ccb57]" />
+                        <span>Upload Photo</span>
+                      </>
+                    )}
+                  </button>
+
+                  {currentAvatar && (
+                    <button
+                      type="button"
+                      onClick={() => setCurrentAvatar('')}
+                      className="px-3 py-1.5 rounded-xl text-xs text-slate-400 hover:text-red-300 border border-white/10 hover:border-red-500/30 transition-all flex items-center gap-1 cursor-pointer"
+                    >
+                      <RotateCcw className="h-3 w-3" />
+                      <span>Reset</span>
+                    </button>
+                  )}
+                </div>
+
+                {avatarError && (
+                  <p className="text-[11px] text-red-400 font-mono">{avatarError}</p>
+                )}
+
+                <p className="text-[11px] text-slate-400 leading-relaxed">
+                  Upload any photo — it is auto-cropped 1:1 and compressed to a 128×128 WebP under 15 KB. Or click any tech preset below:
+                </p>
+
+                {/* Tech Presets Grid */}
+                <div className="pt-1">
+                  <span className="block text-[10px] font-mono uppercase text-slate-400 tracking-wider mb-2">
+                    ISE Tech Presets:
+                  </span>
+                  <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin">
+                    {TECH_AVATAR_PRESETS.map((preset) => (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        onClick={() => setCurrentAvatar(preset.dataUrl)}
+                        title={preset.name}
+                        className={`h-11 w-11 rounded-xl p-0.5 shrink-0 border transition-all cursor-pointer ${
+                          currentAvatar === preset.dataUrl
+                            ? 'border-[#3ccb57] ring-2 ring-[#3ccb57]/40 scale-105 shadow-md shadow-[#3ccb57]/20'
+                            : 'border-white/10 hover:border-white/30 hover:scale-105'
+                        }`}
+                      >
+                        <img src={preset.dataUrl} alt={preset.name} className="h-full w-full rounded-[10px] object-cover" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* 1. Profile: Nickname, Real Name & Leaderboard Toggle */}

@@ -12,6 +12,7 @@ export interface UserSession {
   hideFromLeaderboard?: boolean;
   leaderboardAccepted?: boolean;
   apiKey?: string;
+  avatarUrl?: string;
 }
 
 export interface AttachedFile {
@@ -62,6 +63,7 @@ export interface LeaderboardEntry {
   isePoints: number;
   totalScore: number;
   isCurrentUser: boolean;
+  avatarUrl?: string;
 }
 
 export interface QuizQuestion {

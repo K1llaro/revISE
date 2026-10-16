@@ -83,10 +83,10 @@ export default function ISEasyApp() {
 
       setSecurityError(null);
 
-      // 🌟 ПОЛНАЯ ВЫГРУЗКА ПРОФИЛЯ (с флагом согласия лидерборда и реальным именем)
+      // 🌟 ПОЛНАЯ ВЫГРУЗКА ПРОФИЛЯ (с флагом согласия лидерборда, реальным именем и аватаркой)
       const { data: prof } = await supabase
         .from('profiles')
-        .select('nickname, study_year, real_name, leaderboard_accepted, hide_from_leaderboard')
+        .select('nickname, study_year, real_name, leaderboard_accepted, hide_from_leaderboard, avatar_url')
         .eq('id', session.user.id)
         .single();
 
@@ -119,6 +119,7 @@ export default function ISEasyApp() {
           leaderboardAccepted: prof.leaderboard_accepted || false,
           hideFromLeaderboard: prof.hide_from_leaderboard || false,
           apiKey: localKey || undefined,
+          avatarUrl: prof.avatar_url || undefined,
         });
       }
 
@@ -223,6 +224,7 @@ export default function ISEasyApp() {
                 setCurrentUser(null);
               }}
               onApiKeyUpdated={(k) => setCurrentUser((prev) => (prev ? { ...prev, apiKey: k } : null))}
+              onUserUpdated={(updates) => setCurrentUser((prev) => (prev ? { ...prev, ...updates } : null))}
             />
           ) : (
             <AuthCard
@@ -231,8 +233,6 @@ export default function ISEasyApp() {
             />
           )}
         </main>
-
-        {!currentUser && <Footer />}
       </div>
 
       {showOnboarding && (

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Clock, Loader2, Brain, CheckCircle2, ChevronRight, FileCode, CheckSquare, XCircle } from 'lucide-react';
-import type { QuizQuestion, ProgrammingChallenge, CodeAnalysisDrill, QuestionReviewDetail } from '../../types/ise';
+import type { QuizQuestion, ProgrammingChallenge, CodeAnalysisDrill, QuestionReviewDetail, UserSession } from '../../types/ise';
+import { UserAvatar } from '../common/UserAvatar';
 
 export type QuizScoringMode = 'partial' | 'strict' | 'negative';
 
@@ -224,17 +225,23 @@ export const ActiveQuizView: React.FC<{
 export const QuizResultsView: React.FC<{
   activeQuiz: { title: string } | null;
   quizResults: { score: number; details: QuestionReviewDetail[] };
+  user?: UserSession;
   onBack: () => void;
-}> = ({ activeQuiz, quizResults, onBack }) => (
+}> = ({ activeQuiz, quizResults, user, onBack }) => (
   <div className="w-full max-w-5xl mx-auto max-h-full sm:h-[82vh] overflow-y-auto pr-1 sm:pr-2 space-y-4 sm:space-y-5 text-left animate-fade-in pb-4">
-    <div className="p-4 sm:p-7 rounded-xl sm:rounded-2xl border border-white/10 bg-[#060c20]/90 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 shadow-lg">
-      <div>
-        <span className="text-[10px] sm:text-xs font-mono text-[#3ccb57] uppercase font-bold block mb-1">
-          Quiz Finalized · Recorded to your account
-        </span>
-        <h2 className="text-xl sm:text-2xl font-black text-white">{activeQuiz?.title || 'Examination Results'}</h2>
+    <div className="p-4 sm:p-7 rounded-xl sm:rounded-2xl border border-white/10 bg-[#060c20]/90 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-lg">
+      <div className="flex items-center gap-3.5">
+        {user && (
+          <UserAvatar avatarUrl={user.avatarUrl} nickname={user.nickname} size="lg" />
+        )}
+        <div>
+          <span className="text-[10px] sm:text-xs font-mono text-[#3ccb57] uppercase font-bold block mb-1">
+            Quiz Finalized · {user?.nickname ? `${user.nickname}'s Record` : 'Recorded to your account'}
+          </span>
+          <h2 className="text-xl sm:text-2xl font-black text-white">{activeQuiz?.title || 'Examination Results'}</h2>
+        </div>
       </div>
-      <div className="sm:text-right">
+      <div className="sm:text-right shrink-0">
         <span className="text-3xl sm:text-4xl font-black text-[#3ccb57] font-mono">{quizResults.score}%</span>
         <span className="block text-[10px] text-slate-400 uppercase mt-0.5">Final Grade</span>
       </div>
@@ -402,15 +409,23 @@ export const ActiveProgView: React.FC<{
 export const ProgResultsView: React.FC<{
   activeProg: ProgrammingChallenge | null;
   progResults: { score: number; feedback: string };
+  user?: UserSession;
   onBack: () => void;
-}> = ({ activeProg, progResults, onBack }) => (
+}> = ({ activeProg, progResults, user, onBack }) => (
   <div className="w-full max-w-4xl mx-auto max-h-full sm:h-[82vh] overflow-y-auto pr-1 sm:pr-2 space-y-4 sm:space-y-5 text-left animate-fade-in pb-4">
-    <div className="p-4 sm:p-7 rounded-xl sm:rounded-2xl border border-white/10 bg-[#060c20]/90 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 shadow-lg">
-      <div>
-        <span className="text-[10px] sm:text-xs font-mono text-[#3ccb57] uppercase font-bold block mb-1">Evaluation Finalized</span>
-        <h2 className="text-xl sm:text-2xl font-black text-white">{activeProg?.title}</h2>
+    <div className="p-4 sm:p-7 rounded-xl sm:rounded-2xl border border-white/10 bg-[#060c20]/90 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-lg">
+      <div className="flex items-center gap-3.5">
+        {user && (
+          <UserAvatar avatarUrl={user.avatarUrl} nickname={user.nickname} size="lg" />
+        )}
+        <div>
+          <span className="text-[10px] sm:text-xs font-mono text-[#3ccb57] uppercase font-bold block mb-1">
+            Evaluation Finalized · {user?.nickname ? `${user.nickname}'s Code` : 'ISE Lab'}
+          </span>
+          <h2 className="text-xl sm:text-2xl font-black text-white">{activeProg?.title}</h2>
+        </div>
       </div>
-      <div className="sm:text-right">
+      <div className="sm:text-right shrink-0">
         <span className="text-3xl sm:text-4xl font-black text-[#3ccb57] font-mono">{progResults.score}/100</span>
         <span className="block text-[10px] text-slate-400 uppercase mt-0.5">Code Score</span>
       </div>
@@ -516,17 +531,25 @@ export const AnalysisResultsView: React.FC<{
   activeAnalysis: CodeAnalysisDrill | null;
   analysisResults: { score: number; feedback: string };
   predictedOutputInput: string;
+  user?: UserSession;
   onBack: () => void;
-}> = ({ activeAnalysis, analysisResults, predictedOutputInput, onBack }) => {
+}> = ({ activeAnalysis, analysisResults, predictedOutputInput, user, onBack }) => {
   const isSuccess = analysisResults.score === 100;
   return (
     <div className="w-full max-w-4xl mx-auto max-h-full sm:h-[82vh] overflow-y-auto pr-1 sm:pr-2 space-y-4 sm:space-y-5 text-left animate-fade-in pb-4">
-      <div className="p-4 sm:p-7 rounded-xl sm:rounded-2xl border border-white/10 bg-[#060c20]/90 backdrop-blur-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 shadow-lg">
-        <div>
-          <span className="text-[10px] sm:text-xs font-mono text-[#3ccb57] uppercase font-bold block mb-1">Audit Evaluated</span>
-          <h2 className="text-xl sm:text-2xl font-black text-white">{activeAnalysis?.title}</h2>
+      <div className="p-4 sm:p-7 rounded-xl sm:rounded-2xl border border-white/10 bg-[#060c20]/90 backdrop-blur-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-lg">
+        <div className="flex items-center gap-3.5">
+          {user && (
+            <UserAvatar avatarUrl={user.avatarUrl} nickname={user.nickname} size="lg" />
+          )}
+          <div>
+            <span className="text-[10px] sm:text-xs font-mono text-[#3ccb57] uppercase font-bold block mb-1">
+              Audit Evaluated · {user?.nickname ? `${user.nickname}'s Trace` : 'Mental Drill'}
+            </span>
+            <h2 className="text-xl sm:text-2xl font-black text-white">{activeAnalysis?.title}</h2>
+          </div>
         </div>
-        <div className="sm:text-right">
+        <div className="sm:text-right shrink-0">
           <span className={`text-3xl sm:text-4xl font-black font-mono ${isSuccess ? 'text-[#3ccb57]' : 'text-amber-400'}`}>
             {analysisResults.score}/100
           </span>

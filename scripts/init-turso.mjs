@@ -13,6 +13,11 @@ const turso = createClient({
 try {
   const schema = await readFile(new URL('../api/schema.sql', import.meta.url), 'utf8');
   await turso.executeMultiple(schema);
+  try {
+    await turso.execute('ALTER TABLE profiles ADD COLUMN avatar_url TEXT;');
+  } catch {
+    // Column already exists
+  }
   const result = await turso.execute('SELECT name FROM sqlite_master WHERE type = ? ORDER BY name', ['table']);
   console.log(`Turso schema is ready. Tables: ${result.rows.map((row) => String(row.name)).join(', ')}`);
 } finally {

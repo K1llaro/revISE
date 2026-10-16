@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS profiles (
   hide_from_leaderboard INTEGER NOT NULL DEFAULT 0,
   leaderboard_accepted INTEGER NOT NULL DEFAULT 0,
   gemini_api_key TEXT,
+  avatar_url TEXT,
   updated_at TEXT,
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );

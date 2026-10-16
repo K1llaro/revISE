@@ -5,7 +5,14 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJ
 const useTursoApi = true;
 const databaseApiBase = import.meta.env.PUBLIC_DATABASE_API_URL?.replace(/\/+$/, '') || '/api';
 
-const authClient = createClient(supabaseUrl, supabaseAnonKey);
+const authClient = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    flowType: 'implicit',
+    detectSessionInUrl: true,
+    persistSession: true,
+    autoRefreshToken: true,
+  },
+});
 
 type QueryOperation = 'select' | 'insert' | 'upsert' | 'update' | 'delete';
 type QueryFilter = { column: string; operator: string; value?: unknown };

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ShieldCheck, AlertTriangle, Loader2, ExternalLink } from 'lucide-react';
+import { AlertTriangle, Loader2, ExternalLink } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import type { UserSession } from '../../types/ise';
 
@@ -21,6 +21,21 @@ export const AuthCard: React.FC<{
   useEffect(() => {
     const handleMessage = async (event: MessageEvent) => {
       if (event.data?.type === 'OAUTH_AUTH_SUCCESS') {
+        const { session, access_token, refresh_token } = event.data;
+        const token = access_token || session?.access_token;
+        const refresh = refresh_token || session?.refresh_token;
+
+        if (token && refresh) {
+          try {
+            await supabase.auth.setSession({
+              access_token: token,
+              refresh_token: refresh,
+            });
+          } catch (err) {
+            console.warn('Could not set session from popup tokens:', err);
+          }
+        }
+        await supabase.auth.getSession();
         setIsSubmitting(false);
         setStatusMessage(null);
         if (popupRef.current && !popupRef.current.closed) {
@@ -30,7 +45,24 @@ export const AuthCard: React.FC<{
           window.clearInterval(checkIntervalRef.current);
           checkIntervalRef.current = null;
         }
-        await supabase.auth.getSession();
+      } else if (event.data?.type === 'OAUTH_AUTH_CODE' && event.data.code) {
+        try {
+          const { data, error } = await supabase.auth.exchangeCodeForSession(event.data.code);
+          if (error) throw error;
+          if (data?.session) {
+            setIsSubmitting(false);
+            setStatusMessage(null);
+            if (popupRef.current && !popupRef.current.closed) {
+              popupRef.current.close();
+            }
+            if (checkIntervalRef.current) {
+              window.clearInterval(checkIntervalRef.current);
+              checkIntervalRef.current = null;
+            }
+          }
+        } catch (err) {
+          console.warn('Opener PKCE exchange notice:', err);
+        }
       } else if (event.data?.type === 'OAUTH_AUTH_ERROR') {
         setIsSubmitting(false);
         setStatusMessage(`Sign-in error: ${event.data.error || 'Failed to authenticate.'}`);
@@ -90,14 +122,16 @@ export const AuthCard: React.FC<{
       popupRef.current = popup;
 
       if (checkIntervalRef.current) window.clearInterval(checkIntervalRef.current);
-      checkIntervalRef.current = window.setInterval(async () => {
+      checkIntervalRef.current = window.setInterval(() => {
         if (popup.closed) {
           if (checkIntervalRef.current) {
             window.clearInterval(checkIntervalRef.current);
             checkIntervalRef.current = null;
           }
-          setIsSubmitting(false);
-          await supabase.auth.getSession();
+          setTimeout(async () => {
+            await supabase.auth.getSession();
+            setIsSubmitting(false);
+          }, 400);
         }
       }, 700);
     } catch (error) {
@@ -160,12 +194,6 @@ export const AuthCard: React.FC<{
           </>
         )}
       </button>
-
-      {/* Бейдж безопасности */}
-      <div className="pt-2 border-t border-white/5 flex items-center justify-center gap-1.5 text-[11px] text-slate-500 font-mono">
-        <ShieldCheck className="h-3.5 w-3.5 text-[#3ccb57]" />
-        <span>Cryptographically verified student access</span>
-      </div>
     </div>
   );
 };

@@ -8,6 +8,7 @@ import { getChoiceLengthBiasWarning, getQuestionTypeCountMismatch } from '../../
 import { LearnWorkspace } from './LearnWorkspace';
 import { ActiveQuizView, QuizResultsView, ActiveProgView, ProgResultsView, ActiveAnalysisView, AnalysisResultsView, scoreQuizQuestion, type QuizScoringMode } from './ActiveViews';
 import { QuizModal, ProgrammingModal, AnalysisModal, UploadModal, AdminModal, HistoryModal, SettingsModal, LeaderboardModal, type QuizPreset, type QuizPresetSettings } from './WorkspaceModals';
+import { UserAvatar } from '../common/UserAvatar';
 
 const HOME_PHRASES = [
   'It\'s not that complicated.',
@@ -62,7 +63,8 @@ export const AuthenticatedWorkspace: React.FC<{
   user: UserSession;
   onSignOut: () => void;
   onApiKeyUpdated: (k: string) => void;
-}> = ({ user, onSignOut, onApiKeyUpdated }) => {
+  onUserUpdated?: (updates: Partial<UserSession>) => void;
+}> = ({ user, onSignOut, onApiKeyUpdated, onUserUpdated }) => {
   const [currentView, setCurrentView] = useState<AppView>('station');
   const [activeModal, setActiveModal] = useState<ActiveModal>('none');
   const [workspaceMode, setWorkspaceMode] = useState<'home' | 'practice' | 'learn'>('home');
@@ -210,7 +212,7 @@ export const AuthenticatedWorkspace: React.FC<{
     // 1. Получаем профили студентов
     const { data: profiles } = await supabase
       .from('profiles')
-      .select('id, nickname, real_name, study_year, hide_from_leaderboard, leaderboard_accepted')
+      .select('id, nickname, real_name, study_year, hide_from_leaderboard, leaderboard_accepted, avatar_url')
       .eq('hide_from_leaderboard', false);
 
     // 2. Получаем историю за 30 дней
@@ -241,6 +243,7 @@ export const AuthenticatedWorkspace: React.FC<{
           isePoints: totalPoints,
           totalScore: totalIndex,
           isCurrentUser: prof.id === user.id,
+          avatarUrl: prof.avatar_url || undefined,
         };
       });
 
@@ -1350,6 +1353,7 @@ Output strictly as JSON without markdown:
     }
     user.leaderboardAccepted = true;
     if (realName) user.realName = realName;
+    onUserUpdated?.({ leaderboardAccepted: true, realName: realName || user.realName });
     fetchLeaderboardData();
   };
 
@@ -1364,7 +1368,7 @@ Output strictly as JSON without markdown:
       onSubmit={handleSubmitProgramming}
     />
   ) : currentView === 'prog_results' && progResults ? (
-    <ProgResultsView activeProg={activeProg} progResults={progResults} onBack={() => setCurrentView('station')} />
+    <ProgResultsView activeProg={activeProg} progResults={progResults} user={user} onBack={() => setCurrentView('station')} />
   ) : currentView === 'active_analysis' && activeAnalysis ? (
     <ActiveAnalysisView
       activeAnalysis={activeAnalysis}
@@ -1378,7 +1382,7 @@ Output strictly as JSON without markdown:
       onSubmit={handleSubmitAnalysis}
     />
   ) : currentView === 'analysis_results' && analysisResults ? (
-    <AnalysisResultsView activeAnalysis={activeAnalysis} analysisResults={analysisResults} predictedOutputInput={predictedOutputInput} onBack={() => setCurrentView('station')} />
+    <AnalysisResultsView activeAnalysis={activeAnalysis} analysisResults={analysisResults} predictedOutputInput={predictedOutputInput} user={user} onBack={() => setCurrentView('station')} />
   ) : currentView === 'active_quiz' && activeQuiz ? (
     <ActiveQuizView
       activeQuiz={activeQuiz}
@@ -1405,7 +1409,7 @@ Output strictly as JSON without markdown:
       onSubmit={handleFinishQuiz}
     />
   ) : currentView === 'quiz_results' && quizResults ? (
-    <QuizResultsView activeQuiz={activeQuiz} quizResults={quizResults} onBack={() => setCurrentView('station')} />
+    <QuizResultsView activeQuiz={activeQuiz} quizResults={quizResults} user={user} onBack={() => setCurrentView('station')} />
   ) : workspaceMode === 'learn' ? (
     <LearnWorkspaceErrorBoundary>
       <LearnWorkspace user={user} currentYear={currentYear} onBack={() => setWorkspaceMode('home')} />
@@ -1436,8 +1440,16 @@ Output strictly as JSON without markdown:
     </div>
   ) : (
     <div className="w-full max-w-5xl mx-auto p-4 sm:p-8 flex-1 flex flex-col justify-center animate-fade-in text-left">
-      <div className="mb-8 text-center">
-        <h1 className="text-5xl sm:text-6xl font-black text-white">Welcome, <span className="text-[#3ccb57]">{user.nickname || user.email}</span></h1>
+      <div className="mb-8 text-center flex flex-col items-center">
+        <button
+          type="button"
+          onClick={() => setActiveModal('settings')}
+          title="Click to edit profile & avatar"
+          className="mb-4 group relative cursor-pointer focus:outline-none"
+        >
+          <UserAvatar avatarUrl={user.avatarUrl} nickname={user.nickname} size="xl" className="group-hover:ring-2 group-hover:ring-[#3ccb57]/50 transition-all shadow-xl" />
+        </button>
+        <h1 className="text-4xl sm:text-6xl font-black text-white">Welcome, <span className="text-[#3ccb57]">{user.nickname || user.email}</span></h1>
         <p className="mt-4 min-h-6 text-base sm:text-lg text-slate-400">{homePhrase}</p>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-7">
@@ -1466,7 +1478,17 @@ Output strictly as JSON without markdown:
               <img src="/favicon.svg" alt="revISE logo" className="h-9 w-9 shrink-0 object-contain" />
               <span className="min-w-0"><span className="block text-base font-black text-white">rev<span className="text-[#3ccb57]">ISE</span></span><span className="block truncate text-[11px] text-slate-500">{user.nickname || user.email} · {user.apiKey ? 'AI Studio active' : 'No AI key'}</span></span>
             </button>
-            <span className="hidden sm:inline-flex rounded-full border border-[#3ccb57]/30 bg-[#3ccb57]/10 px-2.5 py-1 text-[10px] font-mono font-bold uppercase text-[#3ccb57]">{currentYear}</span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setActiveModal('settings')}
+                title="Edit profile & avatar"
+                className="cursor-pointer transition-transform hover:scale-105"
+              >
+                <UserAvatar avatarUrl={user.avatarUrl} nickname={user.nickname} size="sm" />
+              </button>
+              <span className="hidden sm:inline-flex rounded-full border border-[#3ccb57]/30 bg-[#3ccb57]/10 px-2.5 py-1 text-[10px] font-mono font-bold uppercase text-[#3ccb57]">{currentYear}</span>
+            </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap lg:justify-end">
             {isAdmin && <button type="button" onClick={() => { loadData(); setActiveModal('admin'); }} className="inline-flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-950/20 px-3 py-2 text-xs font-bold text-amber-300 hover:bg-amber-950/40 cursor-pointer"><Shield className="h-4 w-4" /><span>Admin ({flaggedItems.length})</span></button>}
@@ -1549,6 +1571,8 @@ Output strictly as JSON without markdown:
           if (updates.nickname) user.nickname = updates.nickname;
           if (updates.realName !== undefined) user.realName = updates.realName;
           if (updates.hideFromLeaderboard !== undefined) user.hideFromLeaderboard = updates.hideFromLeaderboard;
+          if (updates.avatarUrl !== undefined) user.avatarUrl = updates.avatarUrl;
+          onUserUpdated?.(updates);
         }}
         currentYear={currentYear}
         onYearChange={async (yr) => {
