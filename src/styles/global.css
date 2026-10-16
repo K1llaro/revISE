@@ -49,3 +49,117 @@ html, body {
   background: rgba(60, 203, 87, 0.5);
 }
 
+/* ==========================================================================
+   DISCORD-STYLE ANIMATED AVATAR FRAMES
+   ========================================================================== */
+
+@keyframes avatar-spin-slow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes avatar-spin-reverse {
+  from {
+    transform: rotate(360deg);
+  }
+  to {
+    transform: rotate(0deg);
+  }
+}
+
+@keyframes avatar-neon-pulse {
+  0%, 100% {
+    opacity: 0.75;
+    filter: drop-shadow(0 0 6px rgba(60, 203, 87, 0.6));
+  }
+  50% {
+    opacity: 1;
+    filter: drop-shadow(0 0 14px rgba(60, 203, 87, 0.95)) drop-shadow(0 0 20px rgba(60, 203, 87, 0.4));
+  }
+}
+
+@keyframes avatar-fire-flicker {
+  0%, 100% {
+    filter: drop-shadow(0 0 8px rgba(249, 115, 22, 0.7)) drop-shadow(0 0 16px rgba(239, 68, 68, 0.5));
+    opacity: 0.85;
+  }
+  50% {
+    filter: drop-shadow(0 0 16px rgba(251, 146, 60, 0.95)) drop-shadow(0 0 24px rgba(234, 179, 8, 0.8));
+    opacity: 1;
+  }
+}
+
+@keyframes avatar-quantum-pulse {
+  0%, 100% {
+    filter: drop-shadow(0 0 8px rgba(168, 85, 247, 0.7)) drop-shadow(0 0 16px rgba(99, 102, 241, 0.5));
+    opacity: 0.8;
+  }
+  50% {
+    filter: drop-shadow(0 0 16px rgba(192, 132, 252, 1)) drop-shadow(0 0 24px rgba(147, 51, 234, 0.8));
+    opacity: 1;
+  }
+}
+
+@keyframes avatar-electric-zap {
+  0%, 100% {
+    filter: drop-shadow(0 0 6px rgba(56, 189, 248, 0.7));
+    opacity: 0.85;
+  }
+  25% {
+    filter: drop-shadow(0 0 14px rgba(14, 165, 233, 1)) drop-shadow(0 0 20px rgba(96, 165, 250, 0.8));
+    opacity: 1;
+  }
+  50% {
+    filter: drop-shadow(0 0 8px rgba(56, 189, 248, 0.75));
+    opacity: 0.9;
+  }
+  75% {
+    filter: drop-shadow(0 0 18px rgba(37, 99, 235, 1)) drop-shadow(0 0 26px rgba(56, 189, 248, 0.9));
+    opacity: 1;
+  }
+}
+
+@keyframes avatar-gold-gleam {
+  0%, 100% {
+    filter: drop-shadow(0 0 6px rgba(234, 179, 8, 0.6)) drop-shadow(0 0 12px rgba(250, 204, 21, 0.3));
+    opacity: 0.85;
+  }
+  50% {
+    filter: drop-shadow(0 0 16px rgba(250, 204, 21, 0.95)) drop-shadow(0 0 24px rgba(245, 158, 11, 0.6));
+    opacity: 1;
+  }
+}
+
+.animate-avatar-spin-slow {
+  animation: avatar-spin-slow 4s linear infinite;
+}
+
+.animate-avatar-spin-reverse {
+  animation: avatar-spin-reverse 5s linear infinite;
+}
+
+.animate-avatar-neon-pulse {
+  animation: avatar-neon-pulse 2.2s ease-in-out infinite;
+}
+
+.animate-avatar-fire-flicker {
+  animation: avatar-fire-flicker 1.8s ease-in-out infinite;
+}
+
+.animate-avatar-quantum-pulse {
+  animation: avatar-quantum-pulse 2.5s ease-in-out infinite;
+}
+
+.animate-avatar-electric-zap {
+  animation: avatar-electric-zap 1.5s ease-in-out infinite;
+}
+
+.animate-avatar-gold-gleam {
+  animation: avatar-gold-gleam 2s ease-in-out infinite;
+}
+
+

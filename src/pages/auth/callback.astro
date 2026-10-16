@@ -188,9 +188,11 @@
           // 3. Проверяем код авторизации (PKCE Flow)
           const code = searchParams.get('code');
           if (code) {
-            // Отправляем код родителю сразу, так как у родительского окна (iframe) есть PKCE verifier в localStorage
+            // Отправляем код родителю сразу, так как у родительского окна есть PKCE verifier в localStorage
             if (window.opener) {
               window.opener.postMessage({ type: 'OAUTH_AUTH_CODE', code }, '*');
+              if (statusText) statusText.textContent = 'Authenticating with revISE...';
+              return;
             }
 
             try {
@@ -205,7 +207,7 @@
                 return;
               }
             } catch (err) {
-              console.warn('Popup code exchange note (opener will handle):', err);
+              console.warn('Popup code exchange note:', err);
             }
           }
 

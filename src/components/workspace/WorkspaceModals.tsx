@@ -10,7 +10,7 @@ import type { AttachedFile, FlaggedMaterial, StudyYear, TestHistoryItem, Questio
 import { getGeminiModelUsage } from '../../lib/gemini';
 import { FileDropzone, ApiKeyTooltip } from '../common/LayoutComponents';
 import { UserAvatar } from '../common/UserAvatar';
-import { processAvatarFile, TECH_AVATAR_PRESETS, getAvatarSizeKb } from '../../lib/avatarUtils';
+import { processAvatarFile, getAvatarSizeKb } from '../../lib/avatarUtils';
 
 export interface QuizPresetSettings {
   quizCustomTitle: string;
@@ -1626,7 +1626,7 @@ export const SettingsModal: React.FC<{
         hideFromLeaderboard: hideLeaderboard,
         avatarUrl: currentAvatar || undefined,
       });
-      setProfileMsg('Profile and avatar updated successfully!');
+      setProfileMsg('Profile updated successfully!');
       setTimeout(() => setProfileMsg(null), 3000);
     } else {
       setProfileMsg('Error updating: ' + error.message);
@@ -1776,32 +1776,8 @@ export const SettingsModal: React.FC<{
                 )}
 
                 <p className="text-[11px] text-slate-400 leading-relaxed">
-                  Upload any photo — it is auto-cropped 1:1 and compressed to a 128×128 WebP under 15 KB. Or click any tech preset below:
+                  Upload any photo — it is auto-cropped 1:1 and compressed to a 128×128 WebP under 15 KB.
                 </p>
-
-                {/* Tech Presets Grid */}
-                <div className="pt-1">
-                  <span className="block text-[10px] font-mono uppercase text-slate-400 tracking-wider mb-2">
-                    ISE Tech Presets:
-                  </span>
-                  <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin">
-                    {TECH_AVATAR_PRESETS.map((preset) => (
-                      <button
-                        key={preset.id}
-                        type="button"
-                        onClick={() => setCurrentAvatar(preset.dataUrl)}
-                        title={preset.name}
-                        className={`h-11 w-11 rounded-xl p-0.5 shrink-0 border transition-all cursor-pointer ${
-                          currentAvatar === preset.dataUrl
-                            ? 'border-[#3ccb57] ring-2 ring-[#3ccb57]/40 scale-105 shadow-md shadow-[#3ccb57]/20'
-                            : 'border-white/10 hover:border-white/30 hover:scale-105'
-                        }`}
-                      >
-                        <img src={preset.dataUrl} alt={preset.name} className="h-full w-full rounded-[10px] object-cover" />
-                      </button>
-                    ))}
-                  </div>
-                </div>
               </div>
             </div>
           </div>
