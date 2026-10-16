@@ -1057,6 +1057,38 @@ export const HistoryModal: React.FC<{
     }
   };
 
+  const chartDays = useMemo(() => {
+    const days = [];
+    const curr = new Date(startDate);
+    const end = new Date(endDate);
+    let limit = 0;
+
+    while (curr <= end && limit < 40) {
+      const dateStr = curr.toISOString().split('T')[0];
+      const itemsOnDay = historyList.filter((item) => item.rawDate?.startsWith(dateStr));
+      const averageScore = (items: TestHistoryItem[]) =>
+        items.length > 0
+          ? Math.round(items.reduce((total, item) => total + (item.maxScore > 0 ? item.score / item.maxScore * 100 : 0), 0) / items.length)
+          : 0;
+      const quizItems = itemsOnDay.filter((item) => item.type.toLowerCase().includes('quiz'));
+      const codeItems = itemsOnDay.filter((item) => item.type.toLowerCase().includes('code'));
+      const analysisItems = itemsOnDay.filter((item) => item.type.toLowerCase().includes('analysis') || item.type.toLowerCase().includes('tracing'));
+
+      days.push({
+        dateStr,
+        displayDate: `${String(curr.getDate()).padStart(2, '0')}/${String(curr.getMonth() + 1).padStart(2, '0')}`,
+        quizScore: averageScore(quizItems),
+        codeScore: averageScore(codeItems),
+        analysisScore: averageScore(analysisItems),
+        totalTests: itemsOnDay.length,
+        items: itemsOnDay,
+      });
+      curr.setDate(curr.getDate() + 1);
+      limit += 1;
+    }
+    return days;
+  }, [startDate, endDate, historyList]);
+
   const exportHistoryDetails = (item: TestHistoryItem) => {
     if (!item.details?.length) return;
     const lines = [
@@ -1553,14 +1585,16 @@ export const SettingsModal: React.FC<{
   const [hideLeaderboard, setHideLeaderboard] = useState(user.hideFromLeaderboard || false);
   const [profileMsg, setProfileMsg] = useState<string | null>(null);
 
-  const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showApiKey, setShowApiKey] = useState(false);
   const [passwordMsg, setPasswordMsg] = useState<{ text: string; error: boolean } | null>(null);
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [deleteAccountError, setDeleteAccountError] = useState<string | null>(null);
 
   const REQUIRED_DELETE_PHRASE = "I want to delete this account";
 
@@ -1587,8 +1621,8 @@ export const SettingsModal: React.FC<{
   };
 
   const handleApplyPassword = async () => {
-    if (!oldPassword || !newPassword) {
-      setPasswordMsg({ text: 'Please fill both old and new password fields.', error: true });
+    if (!newPassword) {
+      setPasswordMsg({ text: 'Enter a new password.', error: true });
       return;
     }
     if (newPassword.length < 6) {
@@ -1599,45 +1633,38 @@ export const SettingsModal: React.FC<{
     setIsUpdatingPassword(true);
     setPasswordMsg(null);
 
-    const { error: signInErr } = await supabase.auth.signInWithPassword({
-      email: user.email,
-      password: oldPassword,
-    });
-
-    if (signInErr) {
+    try {
+      const { error: updateErr } = await supabase.auth.updateUser({ password: newPassword });
+      if (updateErr) {
+        setPasswordMsg({ text: updateErr.message, error: true });
+      } else {
+        setPasswordMsg({ text: 'Password changed successfully!', error: false });
+        setNewPassword('');
+        setTimeout(() => setPasswordMsg(null), 4000);
+      }
+    } catch (error) {
+      setPasswordMsg({
+        text: error instanceof Error ? error.message : 'Could not update your password. Please try again.',
+        error: true,
+      });
+    } finally {
       setIsUpdatingPassword(false);
-      setPasswordMsg({ text: 'Incorrect current password!', error: true });
-      return;
-    }
-
-    const { error: updateErr } = await supabase.auth.updateUser({ password: newPassword });
-    setIsUpdatingPassword(false);
-
-    if (updateErr) {
-      setPasswordMsg({ text: updateErr.message, error: true });
-    } else {
-      setPasswordMsg({ text: 'Password changed successfully! No email needed.', error: false });
-      setOldPassword('');
-      setNewPassword('');
-      setTimeout(() => setPasswordMsg(null), 4000);
     }
   };
 
   const handleExecuteDeleteAccount = async () => {
     if (deleteConfirmText !== REQUIRED_DELETE_PHRASE) return;
     setIsDeletingAccount(true);
-
     try {
-      await supabase.rpc('delete_user_account');
-    } catch (e) {}
-
-    try {
-      await supabase.from('profiles').delete().eq('id', user.id);
-    } catch (e) {}
-
-    localStorage.clear();
-    await supabase.auth.signOut();
-    window.location.reload();
+      const { error } = await supabase.rpc('delete_user_account');
+      if (error) throw new Error(error.message);
+      localStorage.clear();
+      await supabase.auth.signOut({ scope: 'local' });
+      window.location.reload();
+    } catch (error) {
+      setDeleteAccountError(error instanceof Error ? error.message : 'Could not delete this account.');
+      setIsDeletingAccount(false);
+    }
   };
 
   return (
@@ -1718,29 +1745,31 @@ export const SettingsModal: React.FC<{
           {/* 2. Change Password */}
           <div className="p-4 sm:p-5 rounded-xl bg-white/[0.02] border border-white/10 space-y-3">
             <label className="block text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-              <Key className="h-4 w-4 text-[#3ccb57]" /> Change Password (No verification required)
+              <Key className="h-4 w-4 text-[#3ccb57]" /> Change Password
             </label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <p className="text-[11px] text-slate-400">
+              Your signed-in session verifies your account; a current password is not required.
+            </p>
+            <div className="relative">
               <input
-                type="password"
-                autoComplete="new-password"
-                readOnly
-                onFocus={(e) => e.currentTarget.removeAttribute('readonly')}
-                value={oldPassword}
-                onChange={(e) => setOldPassword(e.target.value)}
-                placeholder="Current Password"
-                className="p-2.5 rounded-xl bg-black/60 border border-white/10 text-xs text-white focus:outline-none focus:border-[#3ccb57]"
-              />
-              <input
-                type="password"
+                type={showNewPassword ? 'text' : 'password'}
                 autoComplete="new-password"
                 readOnly
                 onFocus={(e) => e.currentTarget.removeAttribute('readonly')}
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 placeholder="New Password (min 6 chars)"
-                className="p-2.5 rounded-xl bg-black/60 border border-white/10 text-xs text-white focus:outline-none focus:border-[#3ccb57]"
+                className="w-full p-2.5 pr-10 rounded-xl bg-black/60 border border-white/10 text-xs text-white focus:outline-none focus:border-[#3ccb57]"
               />
+              <button
+                type="button"
+                onClick={() => setShowNewPassword((shown) => !shown)}
+                aria-label={showNewPassword ? 'Hide new password' : 'Show new password'}
+                aria-pressed={showNewPassword}
+                className="absolute inset-y-0 right-0 flex items-center px-3 text-slate-400 hover:text-white cursor-pointer"
+              >
+                {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
             </div>
             <div className="flex justify-between items-center pt-1">
               {passwordMsg ? (
@@ -1784,13 +1813,23 @@ export const SettingsModal: React.FC<{
             </div>
             <div className="flex flex-col sm:flex-row gap-2">
               <input
-                type="password"
+                type={showApiKey ? 'text' : 'password'}
                 autoComplete="new-password"
                 value={apiKeyInput}
                 onChange={(e) => setApiKeyInput(e.target.value)}
                 placeholder="AIzaSy..."
                 className="flex-1 p-2.5 rounded-xl bg-black/60 border border-white/10 text-xs text-white font-mono"
               />
+              <button
+                type="button"
+                onClick={() => setShowApiKey((shown) => !shown)}
+                aria-label={showApiKey ? 'Hide API key' : 'Show API key'}
+                aria-pressed={showApiKey}
+                className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-black/60 px-3 py-2.5 text-xs text-slate-300 hover:text-white cursor-pointer"
+              >
+                {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                {showApiKey ? 'Hide' : 'Show'}
+              </button>
               <button onClick={onSaveKey} className="px-5 py-2.5 rounded-xl font-bold text-xs bg-[#3ccb57] text-black cursor-pointer w-full sm:w-auto">
                 Save
               </button>
@@ -1813,6 +1852,7 @@ export const SettingsModal: React.FC<{
                 type="button"
                 onClick={() => {
                   setDeleteConfirmText('');
+                  setDeleteAccountError(null);
                   setShowDeleteModal(true);
                 }}
                 className="px-5 py-2.5 rounded-xl text-xs font-bold bg-red-600/30 hover:bg-red-600/50 text-red-200 border border-red-500/40 transition-colors cursor-pointer shrink-0 w-full sm:w-auto"
@@ -1841,6 +1881,11 @@ export const SettingsModal: React.FC<{
             <p className="text-xs text-slate-300 leading-relaxed">
               This action is <strong className="text-red-400">permanent and cannot be undone</strong>. Your personal profile and test scores will be completely erased.
             </p>
+            {deleteAccountError && (
+              <p role="alert" className="rounded-lg border border-red-500/30 bg-red-950/30 p-3 text-xs text-red-200">
+                {deleteAccountError}
+              </p>
+            )}
 
             <div className="p-3 rounded-xl bg-white/[0.02] border border-white/10 text-[11px] text-slate-400">
               💡 <em>Note: Any lecture slides you contributed will remain anonymously in the community library for other students.</em>

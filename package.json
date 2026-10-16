@@ -6,15 +6,19 @@
     "node": ">=22.12.0"
   },
   "scripts": {
-    "dev": "astro dev",
+    "dev": "concurrently -k \"astro dev\" \"node --env-file-if-exists=.env --import tsx api/local-server.ts\"",
     "build": "astro build",
     "preview": "astro preview",
     "astro": "astro",
     "lint": "eslint .",
-    "test": "vitest run"
+    "test": "vitest run",
+    "turso:init": "node scripts/init-turso.mjs",
+    "migrate:turso": "node scripts/migrate-supabase-to-turso.mjs"
   },
   "dependencies": {
     "@astrojs/react": "^7.0.0",
+    "@aws-sdk/client-secrets-manager": "^3.1149.0",
+    "@libsql/client": "^0.17.4",
     "@supabase/supabase-js": "^2.117.2",
     "@tailwindcss/vite": "^4.3.3",
     "@types/react": "^19.3.0",
@@ -31,7 +35,10 @@
     "esbuild": true
   },
   "devDependencies": {
+    "@types/aws-lambda": "^8.10.164",
+    "concurrently": "^10.0.6",
     "eslint": "^10.11.0",
+    "tsx": "^4.23.15",
     "vitest": "^5.0.1"
   }
 }

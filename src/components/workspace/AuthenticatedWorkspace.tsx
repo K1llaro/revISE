@@ -535,7 +535,7 @@ export const AuthenticatedWorkspace: React.FC<{
       throw new Error(`AI content moderation did not return a valid verdict for ${categoryType}.`);
     }
     if (aiVerdict === 'rejected') {
-      console.warn(`[AI Guardrail] Material rejected by AI (${aiTitle}). Zero bytes saved to Supabase.`);
+      console.warn(`[AI Guardrail] Material rejected by AI (${aiTitle}). Nothing was saved.`);
       return null;
     }
 
@@ -665,12 +665,12 @@ Allowed Formats: ${allowedFormats.join(', ')}
 Required question type counts (follow exactly): ${JSON.stringify(typeCounts)}
 User Custom Prompt: ${quizPrompt || 'Comprehensive module exam'}
 User Preferred Title: ${quizCustomTitle || 'None'}
-Approved Supabase study materials for this topic:
+Approved revISE study materials for this topic:
 ${linkedMaterials.map((material) => `- Title: ${material.title}\n  Tag: ${material.tagName}\n  Summary: ${material.summary.slice(0, 900)}`).join('\n').slice(0, 7000) || 'No approved material found for this tag.'}
 
 CRITICAL AUDIT INSTRUCTIONS:
 1. Inspect attached files: If vendor software (Dell, Intel), installers, or memes -> contentVerdict = "rejected". If legitimate CS learning material -> contentVerdict = "approved". If niche -> contentVerdict = "flagged".
-2. When approved Supabase study materials are listed, base questions on them and use the exact slide/section heading from a material summary as slideTitle. If no heading is listed, use the exact material title; leave slideTitle empty only when no listed material supports the question.
+2. When approved revISE study materials are listed, base questions on them and use the exact slide/section heading from a material summary as slideTitle. If no heading is listed, use the exact material title; leave slideTitle empty only when no listed material supports the question.
 3. If genuine slides are attached, the quiz must also be strictly based on the attached materials.
 4. If approved/flagged, reuse an existing tag from the database or create a new hashtag starting with '#' (e.g. #Comp_Org_Buses).
 5. Give every question a concise topic suitable for a learning-mastery report.
@@ -695,7 +695,7 @@ Output strictly as JSON without markdown:
       "correctAnswers": ["exact match string"],
       "explanation": "string",
       "topic": "short concept name",
-      "slideTitle": "exact slide/section heading or material title from listed Supabase materials, or empty string"
+      "slideTitle": "exact slide/section heading or material title from listed revISE materials, or empty string"
     }
   ]
 }
@@ -1072,7 +1072,7 @@ Output strictly as JSON without markdown:
       const earnedPoints = calculatePoints(result.score, progDifficulty);
       const fullTitle = `${activeProgTag ? activeProgTag + ' · ' : ''}${activeProg.title}`;
 
-      await supabase.from('test_history').insert({
+      const { error: saveError } = await supabase.from('test_history').insert({
         user_id: user.id,
         title: fullTitle,
         type: 'Code Challenge',
@@ -1082,6 +1082,7 @@ Output strictly as JSON without markdown:
         time_spent: 'Completed',
         ai_feedback: result.feedback,
       });
+      if (saveError) throw new Error(`Could not save code challenge results: ${saveError.message}`);
 
       loadData();
       setIsGenerating(false);
@@ -1201,7 +1202,7 @@ Output strictly as JSON without markdown:
       const earnedPoints = calculatePoints(finalScore, analysisDifficulty);
       const fullTitle = `${activeAnalysisTag ? activeAnalysisTag + ' · ' : ''}${activeAnalysis.title}`;
 
-      await supabase.from('test_history').insert({
+      const { error: saveError } = await supabase.from('test_history').insert({
         user_id: user.id,
         title: fullTitle,
         type: 'Mental Code Tracing',
@@ -1211,6 +1212,7 @@ Output strictly as JSON without markdown:
         time_spent: 'Completed',
         ai_feedback: result.feedback,
       });
+      if (saveError) throw new Error(`Could not save code tracing results: ${saveError.message}`);
 
       loadData();
       setIsGenerating(false);
@@ -1308,8 +1310,13 @@ Output strictly as JSON without markdown:
   };
 
   const handleAdminAction = async (id: string, action: 'approve' | 'reject') => {
-    if (action === 'approve') await supabase.from('curriculum_materials').update({ status: 'approved' }).eq('id', id);
-    else await supabase.from('curriculum_materials').delete().eq('id', id);
+    const result = action === 'approve'
+      ? await supabase.from('curriculum_materials').update({ status: 'approved' }).eq('id', id)
+      : await supabase.from('curriculum_materials').delete().eq('id', id);
+    if (result.error) {
+      alert(`Could not ${action === 'approve' ? 'approve' : 'reject'} material: ${result.error.message}`);
+      return;
+    }
     loadData();
   };
 
@@ -1325,7 +1332,7 @@ Output strictly as JSON without markdown:
     setQuizCustomTimer('');
     setQuizTypePercentages({ mcq: 75, text: 5, single: 20 });
     setQuizPrompt(
-      `Create a focused review quiz only for these weak topics: ${topicList.join(', ')}. Prioritize concepts with the lowest mastery. Use the approved Supabase study materials for the selected tag and do not introduce unrelated topics.`
+      `Create a focused review quiz only for these weak topics: ${topicList.join(', ')}. Prioritize concepts with the lowest mastery. Use the approved revISE study materials for the selected tag and do not introduce unrelated topics.`
     );
     setQuizAttachedFiles([]);
     setGenerationError(null);
@@ -1333,10 +1340,14 @@ Output strictly as JSON without markdown:
   };
 
   const handleConsentAccepted = async (realName?: string) => {
-    await supabase.from('profiles').update({
+    const { error } = await supabase.from('profiles').update({
       leaderboard_accepted: true,
       real_name: realName || null,
     }).eq('id', user.id);
+    if (error) {
+      alert(`Could not save leaderboard consent: ${error.message}`);
+      return;
+    }
     user.leaderboardAccepted = true;
     if (realName) user.realName = realName;
     fetchLeaderboardData();
@@ -1541,8 +1552,13 @@ Output strictly as JSON without markdown:
         }}
         currentYear={currentYear}
         onYearChange={async (yr) => {
+          const { error } = await supabase.from('profiles').update({ study_year: yr }).eq('id', user.id);
+          if (error) {
+            alert(`Could not update your study year: ${error.message}`);
+            return;
+          }
           setCurrentYear(yr);
-          await supabase.from('profiles').update({ study_year: yr }).eq('id', user.id);
+          user.studyYear = yr;
         }}
         apiKeyInput={apiKeyInput} setApiKeyInput={setApiKeyInput}
         onSaveKey={() => {

@@ -21,6 +21,9 @@ jobs:
         run: npm install
 
       - name: Build Astro site
+        env:
+          PUBLIC_SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
+          PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.PUBLIC_SUPABASE_ANON_KEY }}
         run: npm run build
 
       - name: Install CDK dependencies
@@ -37,4 +40,9 @@ jobs:
         run: cd cdk && npx cdk bootstrap
 
       - name: Deploy CDK infrastructure to AWS
+        env:
+          SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.PUBLIC_SUPABASE_ANON_KEY }}
+          TURSO_SECRET_ARN: ${{ secrets.TURSO_SECRET_ARN }}
+          ADMIN_EMAIL: ${{ vars.ADMIN_EMAIL }}
         run: cd cdk && npx cdk deploy --require-approval never

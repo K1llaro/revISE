@@ -230,7 +230,7 @@ export const QuizResultsView: React.FC<{
     <div className="p-4 sm:p-7 rounded-xl sm:rounded-2xl border border-white/10 bg-[#060c20]/90 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 shadow-lg">
       <div>
         <span className="text-[10px] sm:text-xs font-mono text-[#3ccb57] uppercase font-bold block mb-1">
-          Quiz Finalized · Recorded to Supabase
+          Quiz Finalized · Recorded to your account
         </span>
         <h2 className="text-xl sm:text-2xl font-black text-white">{activeQuiz?.title || 'Examination Results'}</h2>
       </div>

@@ -21,17 +21,23 @@ export const AuthCard: React.FC<{
     setIsSubmitting(true);
     setStatusMessage(null);
 
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'github',
-      options: {
-        scopes: 'read:user user:email',
-        redirectTo: typeof window !== 'undefined' ? `${window.location.origin}` : undefined,
-      },
-    });
+    try {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'github',
+        options: {
+          scopes: 'read:user user:email',
+          redirectTo: typeof window !== 'undefined' ? `${window.location.origin}` : undefined,
+          skipBrowserRedirect: true,
+        },
+      });
 
-    if (error) {
+      if (error) throw error;
+      if (!data.url) throw new Error('GitHub sign-in did not return an authorization URL.');
+      window.location.assign(data.url);
+    } catch (error) {
       setIsSubmitting(false);
-      setStatusMessage(error.message);
+      console.error('Could not start GitHub sign-in.', error);
+      setStatusMessage(error instanceof Error ? error.message : 'Could not start GitHub sign-in. Please try again.');
     }
   };
 

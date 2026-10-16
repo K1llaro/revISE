@@ -170,12 +170,17 @@ export default function ISEasyApp() {
     const cleanNick = onboardingNickname.trim() || 'Student';
     const cleanKey = onboardingApiKey.trim();
 
-    await supabase.from('profiles').upsert({
+    const { error: profileError } = await supabase.from('profiles').upsert({
       id: pendingSession.session.user.id,
       email: pendingSession.email,
       nickname: cleanNick,
       study_year: onboardingYear,
     });
+    if (profileError) {
+      setIsSavingOnboarding(false);
+      setOnboardingError(`Could not save your profile: ${profileError.message}`);
+      return;
+    }
 
     if (cleanKey) {
       localStorage.setItem('gemini_api_key', cleanKey);

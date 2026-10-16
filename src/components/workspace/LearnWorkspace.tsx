@@ -56,11 +56,11 @@ const SUMMARY_MODES = [
 ] as const;
 
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-const getSupabaseErrorMessage = (error: unknown) => {
+const getDatabaseErrorMessage = (error: unknown) => {
   if (typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string') {
     return error.message;
   }
-  return error instanceof Error ? error.message : 'Unknown Supabase error';
+  return error instanceof Error ? error.message : 'Unknown database error';
 };
 
 const COMMON_TECHNICAL_TERMS: NoteTerm[] = [
@@ -596,15 +596,18 @@ export const LearnWorkspace: React.FC<{
         .order('created_at', { ascending: true });
       if (error) throw error;
       if (!cancelled) {
-        setNotes((data || []).map((note) => ({
-          ...note,
-          content_text: typeof note.content_text === 'string'
-            ? note.content_text
-            : typeof note.linked_material?.content_text === 'string'
-              ? note.linked_material.content_text
-              : '',
-          terms: Array.isArray(note.terms) ? note.terms : [],
-        })) as LearnNote[]);
+        setNotes((data || []).map((note) => {
+          const linkedMaterial = Array.isArray(note.linked_material) ? note.linked_material[0] : undefined;
+          return {
+            ...note,
+            content_text: typeof note.content_text === 'string'
+              ? note.content_text
+              : typeof linkedMaterial?.content_text === 'string'
+                ? linkedMaterial.content_text
+                : '',
+            terms: Array.isArray(note.terms) ? note.terms : [],
+          };
+        }) as LearnNote[]);
       }
     };
     loadNotes().catch((error: Error) => setLoadError(error.message));
@@ -823,7 +826,7 @@ Return JSON only:
       } as LearnNote : item));
       setStatus(`Regenerated "${title}" from the saved note. Original files are not retained in Learn.`);
     } catch (error) {
-      setStatus(`Could not regenerate note: ${getSupabaseErrorMessage(error)}`);
+      setStatus(`Could not regenerate note: ${getDatabaseErrorMessage(error)}`);
     } finally {
       setIsRegeneratingNoteId(null);
     }
@@ -1004,7 +1007,7 @@ Learn notes (summaries of the uploaded course slides):
       setManualNoteText('');
       setStatus('Saved to your private Learn notebook. No AI processing or shared curriculum submission was used.');
     } catch (error) {
-      setStatus(`Could not save personal note: ${getSupabaseErrorMessage(error)}`);
+      setStatus(`Could not save personal note: ${getDatabaseErrorMessage(error)}`);
     } finally {
       setIsSaving(false);
     }
@@ -1048,7 +1051,7 @@ Learn notes (summaries of the uploaded course slides):
         if (!data || data.length < pageSize) break;
       }
     } catch (error) {
-      tagWarning = `Existing tags could not be loaded (${getSupabaseErrorMessage(error)}); moderation and submission will continue without tag matching.`;
+      tagWarning = `Existing tags could not be loaded (${getDatabaseErrorMessage(error)}); moderation and submission will continue without tag matching.`;
       console.warn('Could not load approved curriculum material tags before Learn material moderation.', error);
     }
     const textualFiles = attachedFiles
@@ -1171,28 +1174,6 @@ Return JSON only:
         .select('id, title, content_text, curriculum_material_id, source_name, created_at, terms')
         .single();
       if (error) {
-        if (error.code === '23502' && error.message.includes('content_text')) {
-          const { error: rollbackError } = await supabase
-            .from('curriculum_materials')
-            .delete()
-            .eq('id', curriculumMaterial.id)
-            .eq('submitted_by', user.id);
-          const rollbackMessage = rollbackError
-            ? ` The shared curriculum copy could not be removed automatically (${rollbackError.message}).`
-            : '';
-          throw new Error(`The Learn-to-curriculum deduplication migration is missing. Run supabase/learn-note-content-dedup.sql in Supabase SQL Editor, then try again.${rollbackMessage}`);
-        }
-        if (error.code === '23514' && error.message.includes('learn_notes_content_text_check')) {
-          const { error: rollbackError } = await supabase
-            .from('curriculum_materials')
-            .delete()
-            .eq('id', curriculumMaterial.id)
-            .eq('submitted_by', user.id);
-          const rollbackMessage = rollbackError
-            ? ` The shared curriculum copy could not be removed automatically (${rollbackError.message}).`
-            : '';
-          throw new Error(`Supabase is still enforcing the old note length limit. Run supabase/learn-note-content-limit.sql in Supabase SQL Editor, then try again.${rollbackMessage}`);
-        }
         const { error: rollbackError } = await supabase
           .from('curriculum_materials')
           .delete()
@@ -1209,7 +1190,7 @@ Return JSON only:
       setAttachedFiles([]);
       setStatus(`Approved and saved privately. A compact summary was also added to the shared curriculum as ${tagName}. Original files were not stored. ${tagWarning}`);
     } catch (error) {
-      setStatus(`Could not save study note: ${getSupabaseErrorMessage(error)}`);
+      setStatus(`Could not save study note: ${getDatabaseErrorMessage(error)}`);
     } finally {
       setIsSaving(false);
     }
