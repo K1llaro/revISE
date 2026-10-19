@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ShieldCheck, AlertTriangle, Loader2 } from 'lucide-react';
+import { AlertTriangle, Loader2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import type { UserSession } from '../../types/ise';
 
@@ -49,7 +49,7 @@ export const AuthCard: React.FC<{
           rev<span className="text-[#3ccb57] drop-shadow-[0_0_20px_rgba(60,203,87,0.4)]">ISE</span>
         </h1>
         <p className="text-xs text-slate-400 mt-1.5 font-mono">
-          Immersive Software Engineering AI Station
+          Studying doesn't need to be hard. Join RevISE.
         </p>
       </div>
 
@@ -93,12 +93,6 @@ export const AuthCard: React.FC<{
           </>
         )}
       </button>
-
-      {/* Бейдж безопасности */}
-      <div className="pt-2 border-t border-white/5 flex items-center justify-center gap-1.5 text-[11px] text-slate-500 font-mono">
-        <ShieldCheck className="h-3.5 w-3.5 text-[#3ccb57]" />
-        <span>Cryptographically verified student access</span>
-      </div>
     </div>
   );
 };

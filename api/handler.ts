@@ -39,6 +39,7 @@ const definitions: Record<TableName, Record<string, ColumnDefinition>> = {
     id: { type: 'text' }, email: { type: 'text' }, nickname: { type: 'text' },
     real_name: { type: 'text', nullable: true }, study_year: { type: 'text' },
     hide_from_leaderboard: { type: 'boolean' }, leaderboard_accepted: { type: 'boolean' },
+    disable_vortex: { type: 'boolean' },
     gemini_api_key: { type: 'text', nullable: true }, updated_at: { type: 'text', nullable: true },
     created_at: { type: 'text' },
   },

@@ -12,6 +12,7 @@ export interface UserSession {
   hideFromLeaderboard?: boolean;
   leaderboardAccepted?: boolean;
   apiKey?: string;
+  disableVortex?: boolean;
 }
 
 export interface AttachedFile {

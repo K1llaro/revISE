@@ -1579,7 +1579,8 @@ export const SettingsModal: React.FC<{
   setApiKeyInput: (s: string) => void;
   onSaveKey: () => void;
   settingsStatus: string | null;
-}> = ({ isOpen, onClose, user, onProfileUpdated, currentYear, onYearChange, apiKeyInput, setApiKeyInput, onSaveKey, settingsStatus }) => {
+  onVortexToggled: (disabled: boolean) => void;
+}> = ({ isOpen, onClose, user, onProfileUpdated, currentYear, onYearChange, apiKeyInput, setApiKeyInput, onSaveKey, settingsStatus, onVortexToggled }) => {
   const [editableNickname, setEditableNickname] = useState(user.nickname || '');
   const [editableRealName, setEditableRealName] = useState(user.realName || '');
   const [hideLeaderboard, setHideLeaderboard] = useState(user.hideFromLeaderboard || false);
@@ -1595,6 +1596,8 @@ export const SettingsModal: React.FC<{
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [deleteAccountError, setDeleteAccountError] = useState<string | null>(null);
+
+  const [vortexDisabled, setVortexDisabled] = useState(user.disableVortex || false);
 
   const REQUIRED_DELETE_PHRASE = "I want to delete this account";
 
@@ -1837,7 +1840,35 @@ export const SettingsModal: React.FC<{
             {settingsStatus && <p className="text-xs text-[#3ccb57] mt-1">{settingsStatus}</p>}
           </div>
 
-          {/* 5. DANGER ZONE */}
+          {/* 5. Graphics & Performance */}
+          <div className="p-4 sm:p-5 rounded-xl bg-white/[0.02] border border-white/10 space-y-3">
+            <label className="block text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+              <span>🎨</span> Graphics &amp; Performance
+            </label>
+
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-xs font-bold text-white block">Background Vortex Animation</span>
+                <span className="text-[11px] text-slate-400">Disabling this may improve performance on slower devices.</span>
+              </div>
+              <button
+                type="button"
+                onClick={async () => {
+                  const newDisabled = !vortexDisabled;
+                  setVortexDisabled(newDisabled);
+                  onVortexToggled(newDisabled);
+                  await supabase.from('profiles').update({ disable_vortex: newDisabled }).eq('id', user.id);
+                }}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors cursor-pointer ${
+                  vortexDisabled ? 'bg-white/20' : 'bg-[#3ccb57]'
+                }`}
+              >
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-black transition-transform ${vortexDisabled ? 'translate-x-1' : 'translate-x-6'}`} />
+              </button>
+            </div>
+          </div>
+
+          {/* 6. DANGER ZONE */}
           <div className="pt-4 border-t border-red-500/20">
             <div className="p-4 sm:p-5 rounded-xl bg-red-950/20 border border-red-500/30 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
               <div>

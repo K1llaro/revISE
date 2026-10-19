@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Sparkles, KeyRound, Loader2, Rocket, EyeOff, Eye, AlertTriangle, LogOut } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import type { UserSession, StudyYear } from '../types/ise';
-import { Navbar, Footer, BackgroundGradients, ApiKeyTooltip } from './common/LayoutComponents';
+import { Navbar, BackgroundGradients, ApiKeyTooltip } from './common/LayoutComponents';
 import { AuthCard } from './auth/AuthCard';
 import { AuthenticatedWorkspace } from './workspace/AuthenticatedWorkspace';
 
@@ -86,7 +86,7 @@ export default function ISEasyApp() {
       // 🌟 ПОЛНАЯ ВЫГРУЗКА ПРОФИЛЯ (с флагом согласия лидерборда и реальным именем)
       const { data: prof } = await supabase
         .from('profiles')
-        .select('nickname, study_year, real_name, leaderboard_accepted, hide_from_leaderboard')
+        .select('nickname, study_year, real_name, leaderboard_accepted, hide_from_leaderboard, disable_vortex')
         .eq('id', session.user.id)
         .single();
 
@@ -119,6 +119,7 @@ export default function ISEasyApp() {
           leaderboardAccepted: prof.leaderboard_accepted || false,
           hideFromLeaderboard: prof.hide_from_leaderboard || false,
           apiKey: localKey || undefined,
+          disableVortex: prof.disable_vortex || false,
         });
       }
 
@@ -209,7 +210,7 @@ export default function ISEasyApp() {
 
   return (
     <div className="relative min-h-[100dvh] h-screen w-full overflow-hidden text-slate-100 selection:bg-[#3ccb57]/30 selection:text-white flex flex-col justify-between">
-      <BackgroundGradients />
+      <BackgroundGradients showVortex={!currentUser?.disableVortex} />
 
       <div className="relative z-10 flex flex-col h-full w-full justify-between overflow-hidden">
         {!currentUser && <Navbar />}
@@ -223,6 +224,7 @@ export default function ISEasyApp() {
                 setCurrentUser(null);
               }}
               onApiKeyUpdated={(k) => setCurrentUser((prev) => (prev ? { ...prev, apiKey: k } : null))}
+              onVortexToggled={(disabled) => setCurrentUser((prev) => (prev ? { ...prev, disableVortex: disabled } : null))}
             />
           ) : (
             <AuthCard
@@ -232,7 +234,6 @@ export default function ISEasyApp() {
           )}
         </main>
 
-        {!currentUser && <Footer />}
       </div>
 
       {showOnboarding && (

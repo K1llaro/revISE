@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { HelpCircle, FileUp, Paperclip, ExternalLink } from 'lucide-react';
 import type { AttachedFile } from '../../types/ise';
 import { readFileForGemini } from '../../lib/gemini';
+import { VortexBackground } from './VortexBackground';
 
 export const ApiKeyTooltip: React.FC = () => {
   const [isVisible, setIsVisible] = useState(false);
@@ -95,22 +96,12 @@ export const Navbar: React.FC = () => (
   </header>
 );
 
-export const Footer: React.FC = () => (
-  <footer className="w-full border-t border-white/[0.06] bg-[#02050f]/80 py-2 sm:py-2.5 text-[11px] sm:text-xs text-slate-500 shrink-0">
-    <div className="w-full px-4 sm:px-8 flex justify-between items-center gap-3">
-      <span className="truncate">rev<span className="text-[#3ccb57]">ISE</span> · LM173</span>
-      <a href="https://aistudio.google.com" target="_blank" rel="noopener noreferrer" className="hover:text-[#3ccb57] transition-colors shrink-0">
-        Google AI Studio
-      </a>
-    </div>
-  </footer>
-);
-
-export const BackgroundGradients: React.FC = () => (
+export const BackgroundGradients: React.FC<{ showVortex?: boolean }> = ({ showVortex = true }) => (
   <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden" aria-hidden="true">
     <div className="absolute inset-0" style={{ background: 'linear-gradient(135deg, #020719 0%, #05193b 30%, #07313f 55%, #0a4d38 80%, #157342 100%)' }} />
     <div className="absolute -bottom-24 -right-24 h-[650px] w-[650px] rounded-full blur-[140px] opacity-50" style={{ background: '#3ccb57' }} />
     <div className="absolute -top-24 -left-24 h-[700px] w-[700px] rounded-full blur-[150px] opacity-70" style={{ background: '#0a2a7a' }} />
+    {showVortex && <VortexBackground />}
     <div className="absolute bottom-0 right-0 w-96 h-1 bg-gradient-to-r from-transparent via-[#3ccb57]/50 to-[#3ccb57]" />
   </div>
 );

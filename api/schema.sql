@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS profiles (
   study_year TEXT NOT NULL DEFAULT 'year1',
   hide_from_leaderboard INTEGER NOT NULL DEFAULT 0,
   leaderboard_accepted INTEGER NOT NULL DEFAULT 0,
+  disable_vortex INTEGER NOT NULL DEFAULT 0,
   gemini_api_key TEXT,
   updated_at TEXT,
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))

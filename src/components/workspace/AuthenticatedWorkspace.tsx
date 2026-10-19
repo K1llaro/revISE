@@ -58,11 +58,74 @@ class LearnWorkspaceErrorBoundary extends React.Component<
   }
 }
 
+let hasAnimatedGreetingThisSession = false;
+
+export const resetGreetingAnimation = () => {
+  hasAnimatedGreetingThisSession = false;
+};
+
+const TypewriterGreeting: React.FC<{ name: string }> = ({ name }) => {
+  const prefix = 'Welcome, ';
+  const cleanName = name.trim() || 'Engineer';
+  const fullText = prefix + cleanName;
+  const [displayedCount, setDisplayedCount] = useState(() => (
+    hasAnimatedGreetingThisSession ? fullText.length : 0
+  ));
+
+  useEffect(() => {
+    if (hasAnimatedGreetingThisSession) {
+      setDisplayedCount(fullText.length);
+      return;
+    }
+
+    let current = 0;
+    const timeout = setTimeout(() => {
+      hasAnimatedGreetingThisSession = true;
+      const interval = setInterval(() => {
+        current += 1;
+        setDisplayedCount(current);
+        if (current >= fullText.length) {
+          clearInterval(interval);
+        }
+      }, 45);
+
+      return () => clearInterval(interval);
+    }, 200);
+
+    return () => clearTimeout(timeout);
+  }, [fullText]);
+
+  const isPrefixDone = displayedCount >= prefix.length;
+  const isTypingDone = displayedCount >= fullText.length;
+
+  const prefixTyped = isPrefixDone
+    ? prefix.replace(/ /g, '\u00A0')
+    : prefix.slice(0, displayedCount).replace(/ /g, '\u00A0');
+
+  const nameTyped = isPrefixDone
+    ? cleanName.slice(0, displayedCount - prefix.length)
+    : '';
+
+  return (
+    <h1 className="text-5xl sm:text-6xl font-black text-white tracking-tight flex items-center justify-center flex-wrap">
+      <span>{prefixTyped}</span>
+      {nameTyped && <span className="text-[#3ccb57]">{nameTyped}</span>}
+      {!isTypingDone && (
+        <span
+          aria-hidden="true"
+          className="terminal-cursor inline-block w-[3px] sm:w-[5px] h-[0.82em] ml-1.5 sm:ml-2 bg-[#3ccb57] align-baseline rounded-[1px] shadow-[0_0_12px_#3ccb57]"
+        />
+      )}
+    </h1>
+  );
+};
+
 export const AuthenticatedWorkspace: React.FC<{
   user: UserSession;
   onSignOut: () => void;
   onApiKeyUpdated: (k: string) => void;
-}> = ({ user, onSignOut, onApiKeyUpdated }) => {
+  onVortexToggled: (disabled: boolean) => void;
+}> = ({ user, onSignOut, onApiKeyUpdated, onVortexToggled }) => {
   const [currentView, setCurrentView] = useState<AppView>('station');
   const [activeModal, setActiveModal] = useState<ActiveModal>('none');
   const [workspaceMode, setWorkspaceMode] = useState<'home' | 'practice' | 'learn'>('home');
@@ -1437,7 +1500,7 @@ Output strictly as JSON without markdown:
   ) : (
     <div className="w-full max-w-5xl mx-auto p-4 sm:p-8 flex-1 flex flex-col justify-center animate-fade-in text-left">
       <div className="mb-8 text-center">
-        <h1 className="text-5xl sm:text-6xl font-black text-white">Welcome, <span className="text-[#3ccb57]">{user.nickname || user.email}</span></h1>
+        <TypewriterGreeting name={user.nickname || user.email || ''} />
         <p className="mt-4 min-h-6 text-base sm:text-lg text-slate-400">{homePhrase}</p>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-7">
@@ -1473,7 +1536,7 @@ Output strictly as JSON without markdown:
             <button type="button" onClick={() => { fetchLeaderboardData(); setActiveModal('leaderboard'); }} className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-slate-200 hover:bg-white/10 cursor-pointer"><Trophy className="h-4 w-4 text-[#3ccb57]" /><span>Leaderboard</span></button>
             <button type="button" onClick={() => { loadData(); fetchStudyMaterials().catch(() => undefined); setActiveModal('history'); }} className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-slate-200 hover:bg-white/10 cursor-pointer"><History className="h-4 w-4 text-[#3ccb57]" /><span>History &amp; Statistics</span></button>
             <button type="button" onClick={() => setActiveModal('settings')} className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-slate-200 hover:bg-white/10 cursor-pointer"><Settings className="h-4 w-4" /><span>Settings</span></button>
-            <button type="button" onClick={onSignOut} className="rounded-lg border border-red-500/20 bg-red-950/20 px-3 py-2 text-xs font-semibold text-red-300 hover:bg-red-950/40 cursor-pointer">Sign Out</button>
+            <button type="button" onClick={() => { resetGreetingAnimation(); onSignOut(); }} className="rounded-lg border border-red-500/20 bg-red-950/20 px-3 py-2 text-xs font-semibold text-red-300 hover:bg-red-950/40 cursor-pointer">Sign Out</button>
           </div>
         </div>
       </header>
@@ -1570,6 +1633,7 @@ Output strictly as JSON without markdown:
           setTimeout(() => setSettingsStatus(null), 2500);
         }}
         settingsStatus={settingsStatus}
+        onVortexToggled={onVortexToggled}
       />
     </div>
   );
