@@ -13,6 +13,7 @@ export interface UserSession {
   leaderboardAccepted?: boolean;
   apiKey?: string;
   disableVortex?: boolean;
+  avatarUrl?: string;
 }
 
 export interface AttachedFile {

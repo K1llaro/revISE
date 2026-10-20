@@ -125,13 +125,28 @@ export const AuthenticatedWorkspace: React.FC<{
   onSignOut: () => void;
   onApiKeyUpdated: (k: string) => void;
   onVortexToggled: (disabled: boolean) => void;
-}> = ({ user, onSignOut, onApiKeyUpdated, onVortexToggled }) => {
+  uiTheme: 'standard' | 'glass' | 'dark_glass';
+  onUiThemeToggled: (theme: 'standard' | 'glass' | 'dark_glass') => void;
+}> = ({ user, onSignOut, onApiKeyUpdated, onVortexToggled, uiTheme, onUiThemeToggled }) => {
   const [currentView, setCurrentView] = useState<AppView>('station');
   const [activeModal, setActiveModal] = useState<ActiveModal>('none');
   const [workspaceMode, setWorkspaceMode] = useState<'home' | 'practice' | 'learn'>('home');
   const [homePhrase, setHomePhrase] = useState('');
   const homeEntryActiveRef = useRef(false);
+  // === ДОБАВЛЯЕМ ВОТ ЭТО ДЛЯ МЕНЮ ПРОФИЛЯ ===
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const profileMenuRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(e.target as Node)) {
+        setIsProfileMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+  // ===========================================
   useEffect(() => {
     if (workspaceMode !== 'home' || currentView !== 'station') {
       homeEntryActiveRef.current = false;
@@ -1534,9 +1549,60 @@ Output strictly as JSON without markdown:
           <div className="flex items-center gap-2 flex-wrap lg:justify-end">
             {isAdmin && <button type="button" onClick={() => { loadData(); setActiveModal('admin'); }} className="inline-flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-950/20 px-3 py-2 text-xs font-bold text-amber-300 hover:bg-amber-950/40 cursor-pointer"><Shield className="h-4 w-4" /><span>Admin ({flaggedItems.length})</span></button>}
             <button type="button" onClick={() => { fetchLeaderboardData(); setActiveModal('leaderboard'); }} className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-slate-200 hover:bg-white/10 cursor-pointer"><Trophy className="h-4 w-4 text-[#3ccb57]" /><span>Leaderboard</span></button>
-            <button type="button" onClick={() => { loadData(); fetchStudyMaterials().catch(() => undefined); setActiveModal('history'); }} className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-slate-200 hover:bg-white/10 cursor-pointer"><History className="h-4 w-4 text-[#3ccb57]" /><span>History &amp; Statistics</span></button>
-            <button type="button" onClick={() => setActiveModal('settings')} className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-slate-200 hover:bg-white/10 cursor-pointer"><Settings className="h-4 w-4" /><span>Settings</span></button>
-            <button type="button" onClick={() => { resetGreetingAnimation(); onSignOut(); }} className="rounded-lg border border-red-500/20 bg-red-950/20 px-3 py-2 text-xs font-semibold text-red-300 hover:bg-red-950/40 cursor-pointer">Sign Out</button>
+            <button type="button" onClick={() => { loadData(); fetchStudyMaterials().catch(() => undefined); setActiveModal('history'); }} className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-slate-200 hover:bg-white/10 cursor-pointer"><History className="h-4 w-4 text-[#3ccb57]" /><span>History</span></button>
+            
+            {/* Настройки (Шестеренка) */}
+            <button type="button" onClick={() => setActiveModal('settings')} className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer" title="Settings">
+              <Settings className="h-5 w-5" />
+            </button>
+
+            {/* Аватарка & Dropdown */}
+            <div className="relative" ref={profileMenuRef}>
+              <button 
+                type="button" 
+                onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
+                className="flex items-center gap-2 focus:outline-none cursor-pointer pl-1 transition-transform active:scale-95"
+              >
+                {user.avatarUrl ? (
+                  <img src={user.avatarUrl} alt="Avatar" className="h-9 w-9 rounded-full object-cover border border-white/10" />
+                ) : (
+                  <div className="h-9 w-9 rounded-full bg-black flex items-center justify-center border border-[#3ccb57]/30">
+                    <span className="text-[#3ccb57] font-bold text-[13px]">
+                      {(user.nickname || 'ST').substring(0, 2).toUpperCase()}
+                    </span>
+                  </div>
+                )}
+              </button>
+              
+              {/* Всплывающее окно (Popover) */}
+              <div 
+                className={`absolute right-0 top-full mt-2 w-48 rounded-xl border border-white/10 bg-[#060c20]/98 backdrop-blur-xl shadow-2xl transition-all duration-200 z-50 ${
+                  isProfileMenuOpen ? 'opacity-100 visible translate-y-0' : 'opacity-0 invisible -translate-y-2'
+                }`}
+              >
+                <div className="p-3 border-b border-white/10">
+                  <p className="text-xs font-bold text-white truncate">{user.nickname}</p>
+                  <p className="text-[10px] text-slate-400 truncate">{user.email}</p>
+                </div>
+                <div className="p-1.5">
+                  <button 
+                    type="button" 
+                    onClick={() => { setIsProfileMenuOpen(false); setActiveModal('settings'); }} 
+                    className="w-full text-left px-3 py-2 text-xs font-medium text-slate-300 hover:text-white hover:bg-white/10 rounded-lg cursor-pointer"
+                  >
+                    Account Settings
+                  </button>
+                  <button 
+                    type="button" 
+                    onClick={() => { setIsProfileMenuOpen(false); resetGreetingAnimation(); onSignOut(); }} 
+                    className="w-full text-left px-3 py-2 text-xs font-bold text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg cursor-pointer mt-1"
+                  >
+                    Sign Out
+                  </button>
+                </div>
+              </div>
+            </div>
+
           </div>
         </div>
       </header>
@@ -1612,6 +1678,7 @@ Output strictly as JSON without markdown:
           if (updates.nickname) user.nickname = updates.nickname;
           if (updates.realName !== undefined) user.realName = updates.realName;
           if (updates.hideFromLeaderboard !== undefined) user.hideFromLeaderboard = updates.hideFromLeaderboard;
+          if (updates.avatarUrl !== undefined) user.avatarUrl = updates.avatarUrl;
         }}
         currentYear={currentYear}
         onYearChange={async (yr) => {
@@ -1634,6 +1701,8 @@ Output strictly as JSON without markdown:
         }}
         settingsStatus={settingsStatus}
         onVortexToggled={onVortexToggled}
+        uiTheme={uiTheme}
+        onUiThemeToggled={onUiThemeToggled}
       />
     </div>
   );

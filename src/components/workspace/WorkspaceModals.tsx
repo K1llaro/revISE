@@ -10,6 +10,7 @@ import type { AttachedFile, FlaggedMaterial, StudyYear, TestHistoryItem, Questio
 import { getGeminiModelUsage } from '../../lib/gemini';
 import { FileDropzone, ApiKeyTooltip } from '../common/LayoutComponents';
 
+
 export interface QuizPresetSettings {
   quizCustomTitle: string;
   quizQuestionCount: number;
@@ -29,6 +30,96 @@ export interface QuizPreset {
   name: string;
   settings: QuizPresetSettings;
 }
+
+import { UploadCloud, ZoomIn, Image as ImageIcon } from 'lucide-react';
+
+export const UserAvatar: React.FC<{ url?: string; name: string; size?: number; className?: string }> = ({ url, name, size = 40, className = '' }) => {
+  if (url) return <img src={url} alt={name} style={{ width: size, height: size }} className={`rounded-full object-cover shrink-0 ${className}`} />;
+  const initials = (name || 'ST').substring(0, 2).toUpperCase();
+  return (
+    <div style={{ width: size, height: size }} className={`rounded-full bg-black flex items-center justify-center border border-[#3ccb57]/30 shrink-0 ${className}`}>
+      <span className="text-[#3ccb57] font-bold" style={{ fontSize: size * 0.4 }}>{initials}</span>
+    </div>
+  );
+};
+
+const ImageCropper: React.FC<{ file: File; onCrop: (base64: string) => void; onCancel: () => void }> = ({ file, onCrop, onCancel }) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [image, setImage] = useState<HTMLImageElement | null>(null);
+  const [scale, setScale] = useState(1);
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+
+  useEffect(() => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        setImage(img);
+        // Начальный масштаб, чтобы заполнить квадрат 250x250
+        const initialScale = Math.max(250 / img.width, 250 / img.height);
+        setScale(initialScale);
+        setPosition({ x: (250 - img.width * initialScale) / 2, y: (250 - img.height * initialScale) / 2 });
+      };
+      img.src = e.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  }, [file]);
+
+  useEffect(() => {
+    if (!image || !canvasRef.current) return;
+    const ctx = canvasRef.current.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, 250, 250);
+    ctx.drawImage(image, position.x, position.y, image.width * scale, image.height * scale);
+  }, [image, scale, position]);
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    setIsDragging(true);
+    setDragStart({ x: e.clientX - position.x, y: e.clientY - position.y });
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging) return;
+    setPosition({ x: e.clientX - dragStart.x, y: e.clientY - dragStart.y });
+  };
+
+  const handleMouseUp = () => setIsDragging(false);
+
+  const handleSave = () => {
+    if (canvasRef.current) {
+      onCrop(canvasRef.current.toDataURL('image/jpeg', 0.9));
+    }
+  };
+
+  return (
+    <div className="flex flex-col items-center space-y-4">
+      <div className="relative overflow-hidden rounded-xl border-2 border-dashed border-[#3ccb57]/50" style={{ width: 250, height: 250 }}>
+        <canvas
+          ref={canvasRef}
+          width={250}
+          height={250}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseUp}
+          className="cursor-move touch-none"
+        />
+        <div className="absolute inset-0 pointer-events-none shadow-[0_0_0_9999px_rgba(0,0,0,0.6)] rounded-full m-[10px]"></div>
+      </div>
+      <div className="w-full max-w-[250px] flex items-center gap-2">
+        <ImageIcon className="h-4 w-4 text-slate-400" />
+        <input type="range" min={0.1} max={3} step={0.05} value={scale} onChange={(e) => setScale(parseFloat(e.target.value))} className="flex-1 accent-[#3ccb57]" />
+        <ZoomIn className="h-4 w-4 text-slate-400" />
+      </div>
+      <div className="flex gap-2 w-full max-w-[250px]">
+        <button onClick={onCancel} className="flex-1 py-2 rounded-lg text-xs font-semibold text-slate-400 bg-white/5 hover:bg-white/10">Cancel</button>
+        <button onClick={handleSave} className="flex-1 py-2 rounded-lg text-xs font-bold text-black bg-[#3ccb57] hover:bg-[#4ade67]">Crop & Save</button>
+      </div>
+    </div>
+  );
+};
 
 /* ==========================================================================
    COMPONENT: SEARCHABLE TAG DROPDOWN
@@ -972,6 +1063,8 @@ export const LeaderboardModal: React.FC<{
 
                           <td className="py-3 px-3 sm:px-4">
                             <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+
+                              <UserAvatar url={(student as any).avatarUrl} name={student.nickname} size={28} />
                               <span className="font-bold text-white text-xs sm:text-sm">{student.nickname}</span>
                               <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-white/5 text-slate-400 uppercase border border-white/10">
                                 {student.studyYear}
@@ -1568,11 +1661,14 @@ export const HistoryModal: React.FC<{
 /* ==========================================================================
    SETTINGS MODAL: EDIT NICKNAME, REAL NAME, PASSWORD, LEADERBOARD TOGGLE & DELETE ACCOUNT
    ========================================================================== */
+/* ==========================================================================
+   SETTINGS MODAL: EDIT NICKNAME, REAL NAME, PASSWORD, LEADERBOARD TOGGLE & DELETE ACCOUNT
+   ========================================================================== */
 export const SettingsModal: React.FC<{
   isOpen: boolean;
   onClose: () => void;
   user: UserSession;
-  onProfileUpdated: (updates: { nickname?: string; realName?: string; hideFromLeaderboard?: boolean }) => void;
+  onProfileUpdated: (updates: { nickname?: string; realName?: string; hideFromLeaderboard?: boolean; avatarUrl?: string }) => void;
   currentYear: StudyYear;
   onYearChange: (yr: StudyYear) => void;
   apiKeyInput: string;
@@ -1580,18 +1676,28 @@ export const SettingsModal: React.FC<{
   onSaveKey: () => void;
   settingsStatus: string | null;
   onVortexToggled: (disabled: boolean) => void;
-}> = ({ isOpen, onClose, user, onProfileUpdated, currentYear, onYearChange, apiKeyInput, setApiKeyInput, onSaveKey, settingsStatus, onVortexToggled }) => {
+  uiTheme: 'standard' | 'glass' | 'dark_glass';
+  onUiThemeToggled: (theme: 'standard' | 'glass' | 'dark_glass') => void;
+}> = ({ isOpen, onClose, user, onProfileUpdated, currentYear, onYearChange, apiKeyInput, setApiKeyInput, onSaveKey, settingsStatus, onVortexToggled, uiTheme, onUiThemeToggled }) => {
+  const [activeTab, setActiveTab] = useState<'account' | 'data' | 'visual' | 'advanced'>('account');
+  
   const [editableNickname, setEditableNickname] = useState(user.nickname || '');
   const [editableRealName, setEditableRealName] = useState(user.realName || '');
   const [hideLeaderboard, setHideLeaderboard] = useState(user.hideFromLeaderboard || false);
   const [profileMsg, setProfileMsg] = useState<string | null>(null);
 
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
+
+  const [oldPassword, setOldPassword] = useState('');
+  const [showOldPassword, setShowOldPassword] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
-  const [showApiKey, setShowApiKey] = useState(false);
   const [passwordMsg, setPasswordMsg] = useState<{ text: string; error: boolean } | null>(null);
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
 
+  const [showApiKey, setShowApiKey] = useState(false);
+  
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
@@ -1602,6 +1708,29 @@ export const SettingsModal: React.FC<{
   const REQUIRED_DELETE_PHRASE = "I want to delete this account";
 
   if (!isOpen) return null;
+
+  const handleAvatarSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    setAvatarError(null);
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) {
+      setAvatarError('File is too large. Maximum size is 10 MB.');
+      return;
+    }
+    setAvatarFile(file);
+  };
+
+  const handleAvatarCrop = async (base64Url: string) => {
+    setAvatarFile(null);
+    const { error } = await supabase.from('profiles').update({ avatar_url: base64Url }).eq('id', user.id);
+    if (error) {
+      setAvatarError(error.message);
+    } else {
+      onProfileUpdated({ avatarUrl: base64Url });
+      setProfileMsg('Avatar updated successfully!');
+      setTimeout(() => setProfileMsg(null), 3000);
+    }
+  };
 
   const handleApplyProfile = async () => {
     const { error } = await supabase.from('profiles').update({
@@ -1624,32 +1753,35 @@ export const SettingsModal: React.FC<{
   };
 
   const handleApplyPassword = async () => {
-    if (!newPassword) {
-      setPasswordMsg({ text: 'Enter a new password.', error: true });
-      return;
-    }
-    if (newPassword.length < 6) {
-      setPasswordMsg({ text: 'New password must be at least 6 characters.', error: true });
-      return;
-    }
+    if (!oldPassword) return setPasswordMsg({ text: 'Enter your current password.', error: true });
+    if (!newPassword) return setPasswordMsg({ text: 'Enter a new password.', error: true });
+    if (newPassword.length < 6) return setPasswordMsg({ text: 'New password must be at least 6 characters.', error: true });
 
     setIsUpdatingPassword(true);
     setPasswordMsg(null);
 
     try {
-      const { error: updateErr } = await supabase.auth.updateUser({ password: newPassword });
-      if (updateErr) {
-        setPasswordMsg({ text: updateErr.message, error: true });
-      } else {
-        setPasswordMsg({ text: 'Password changed successfully!', error: false });
-        setNewPassword('');
-        setTimeout(() => setPasswordMsg(null), 4000);
-      }
-    } catch (error) {
-      setPasswordMsg({
-        text: error instanceof Error ? error.message : 'Could not update your password. Please try again.',
-        error: true,
+      // 1. Проверяем старый пароль
+      const { error: verifyErr } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: oldPassword
       });
+
+      if (verifyErr) {
+        throw new Error('Incorrect current password.');
+      }
+
+      // 2. Обновляем на новый пароль
+      const { error: updateErr } = await supabase.auth.updateUser({ password: newPassword });
+      
+      if (updateErr) throw updateErr;
+
+      setPasswordMsg({ text: 'Password changed successfully!', error: false });
+      setOldPassword('');
+      setNewPassword('');
+      setTimeout(() => setPasswordMsg(null), 4000);
+    } catch (error) {
+      setPasswordMsg({ text: error instanceof Error ? error.message : 'Error updating password.', error: true });
     } finally {
       setIsUpdatingPassword(false);
     }
@@ -1672,296 +1804,346 @@ export const SettingsModal: React.FC<{
 
   return (
     <>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-fade-in text-left">
-        <div className="w-full max-w-5xl rounded-2xl border border-white/10 bg-[#060c20] p-4 sm:p-6 lg:p-7 space-y-4 sm:space-y-6 max-h-[92vh] overflow-y-auto shadow-2xl">
-          <div className="flex justify-between items-center border-b border-white/10 pb-4">
-            <h3 className="text-lg font-bold text-white flex items-center gap-2">
-              <Settings className="h-5 w-5 text-[#3ccb57]" /> User Settings & Account Controls
-            </h3>
-            <button onClick={onClose} className="text-slate-400 hover:text-white cursor-pointer"><X className="h-5 w-5" /></button>
-          </div>
-
-          {/* 1. Profile: Nickname, Real Name & Leaderboard Toggle */}
-          <div className="p-4 sm:p-5 rounded-xl bg-white/[0.02] border border-white/10 space-y-4">
-            <label className="block text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-              <User className="h-4 w-4 text-[#3ccb57]" /> Public Identity & Leaderboard Privacy
-            </label>
-            
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-[11px] text-slate-400 mb-1">Nickname</label>
-                <input
-                  type="text"
-                  autoComplete="off"
-                  readOnly
-                  onFocus={(e) => e.currentTarget.removeAttribute('readonly')}
-                  value={editableNickname}
-                  onChange={(e) => setEditableNickname(e.target.value)}
-                  placeholder="e.g. Kiril_Dev"
-                  className="w-full p-2.5 rounded-xl bg-black/60 border border-white/10 text-xs text-white focus:outline-none focus:border-[#3ccb57]"
-                />
+      <div className="fixed inset-0 z-50 flex bg-[#060c20]/95 backdrop-blur-3xl animate-fade-in text-left">
+        <div className="flex w-full max-w-7xl mx-auto shadow-2xl bg-[#080d1e] overflow-hidden">
+          
+          {/* Левое боковое меню */}
+          <div className="w-64 shrink-0 border-r border-white/10 bg-[#040816] flex flex-col justify-between">
+            <div>
+              <div className="p-6 border-b border-white/10">
+                <h2 className="text-xl font-black text-white flex items-center gap-2">
+                  <Settings className="h-5 w-5 text-[#3ccb57]" /> Settings
+                </h2>
               </div>
-
-              <div>
-                <label className="block text-[11px] text-slate-400 mb-1">Real Name & Surname (Optional)</label>
-                <input
-                  type="text"
-                  autoComplete="off"
-                  readOnly
-                  onFocus={(e) => e.currentTarget.removeAttribute('readonly')}
-                  value={editableRealName}
-                  onChange={(e) => setEditableRealName(e.target.value)}
-                  placeholder="e.g. Kiril Kuzmenko"
-                  className="w-full p-2.5 rounded-xl bg-black/60 border border-white/10 text-xs text-white focus:outline-none focus:border-[#3ccb57]"
-                />
-              </div>
+              <nav className="p-4 space-y-2">
+                {[
+                  { id: 'account', icon: User, label: 'Account' },
+                  { id: 'data', icon: History, label: 'Data & Statistics' },
+                  { id: 'visual', icon: Sparkles, label: 'Visual & Performance' },
+                  { id: 'advanced', icon: Cpu, label: 'Advanced' }
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id as any)}
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
+                      activeTab === tab.id ? 'bg-[#3ccb57]/10 text-[#3ccb57]' : 'text-slate-400 hover:bg-white/5 hover:text-white'
+                    }`}
+                  >
+                    <tab.icon className="h-4 w-4" />
+                    {tab.label}
+                  </button>
+                ))}
+              </nav>
             </div>
-
-            {/* Hide myself from Leaderboard toggle */}
-            <div className="pt-2 flex items-center justify-between border-t border-white/5">
-              <div>
-                <span className="text-xs font-bold text-white block">Hide myself from Leaderboard</span>
-                <span className="text-[11px] text-slate-400">Keep your performance private. You won't appear in the public ranking.</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setHideLeaderboard(!hideLeaderboard)}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors cursor-pointer ${
-                  hideLeaderboard ? 'bg-amber-500' : 'bg-white/20'
-                }`}
-              >
-                <span className={`inline-block h-4 w-4 transform rounded-full bg-black transition-transform ${hideLeaderboard ? 'translate-x-6' : 'translate-x-1'}`} />
-              </button>
-            </div>
-
-            <div className="flex justify-between items-center pt-2">
-              {profileMsg ? <span className="text-xs text-[#3ccb57]">{profileMsg}</span> : <span />}
-              <button
-                onClick={handleApplyProfile}
-                className="px-5 py-2 rounded-xl font-bold text-xs bg-[#3ccb57] text-black hover:bg-[#4ade67] transition-all cursor-pointer"
-              >
-                Apply Profile Changes
+            <div className="p-6">
+              <button onClick={onClose} className="w-full px-4 py-3 rounded-xl text-sm font-semibold text-slate-300 bg-white/5 hover:bg-white/10 transition-colors flex items-center justify-center gap-2 cursor-pointer">
+                <X className="h-4 w-4" /> Close Settings
               </button>
             </div>
           </div>
 
-          {/* 2. Change Password */}
-          <div className="p-4 sm:p-5 rounded-xl bg-white/[0.02] border border-white/10 space-y-3">
-            <label className="block text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-              <Key className="h-4 w-4 text-[#3ccb57]" /> Change Password
-            </label>
-            <p className="text-[11px] text-slate-400">
-              Your signed-in session verifies your account; a current password is not required.
-            </p>
-            <div className="relative">
-              <input
-                type={showNewPassword ? 'text' : 'password'}
-                autoComplete="new-password"
-                readOnly
-                onFocus={(e) => e.currentTarget.removeAttribute('readonly')}
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="New Password (min 6 chars)"
-                className="w-full p-2.5 pr-10 rounded-xl bg-black/60 border border-white/10 text-xs text-white focus:outline-none focus:border-[#3ccb57]"
-              />
-              <button
-                type="button"
-                onClick={() => setShowNewPassword((shown) => !shown)}
-                aria-label={showNewPassword ? 'Hide new password' : 'Show new password'}
-                aria-pressed={showNewPassword}
-                className="absolute inset-y-0 right-0 flex items-center px-3 text-slate-400 hover:text-white cursor-pointer"
-              >
-                {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
-            </div>
-            <div className="flex justify-between items-center pt-1">
-              {passwordMsg ? (
-                <span className={`text-xs ${passwordMsg.error ? 'text-red-400' : 'text-[#3ccb57]'}`}>
-                  {passwordMsg.text}
-                </span>
-              ) : <span />}
-              <button
-                onClick={handleApplyPassword}
-                disabled={isUpdatingPassword}
-                className="px-5 py-2.5 rounded-xl font-bold text-xs bg-[#3ccb57] text-black hover:bg-[#4ade67] transition-all cursor-pointer disabled:opacity-50"
-              >
-                {isUpdatingPassword ? 'Updating...' : 'Apply Password Change'}
-              </button>
-            </div>
-          </div>
+          {/* Контент справа */}
+          <div className="flex-1 overflow-y-auto p-8 lg:p-12">
+            <div className="max-w-2xl">
+              
+              {/* === ACCOUNT TAB === */}
+              {activeTab === 'account' && (
+                <div className="space-y-8 animate-fade-in">
+                  <div>
+                    <h3 className="text-2xl font-bold text-white mb-1">Account Profile</h3>
+                    <p className="text-xs text-slate-400 mb-6">Manage your public identity and avatar.</p>
+                    
+                    <div className="p-6 rounded-2xl bg-white/[0.02] border border-white/10 space-y-6">
+                      
+                      {/* Avatar Upload */}
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-300 mb-3">Profile Picture (Max 10MB)</label>
+                        {avatarFile ? (
+                          <ImageCropper file={avatarFile} onCrop={handleAvatarCrop} onCancel={() => setAvatarFile(null)} />
+                        ) : (
+                          <div className="flex items-center gap-5">
+                            <UserAvatar url={(user as any).avatarUrl} name={user.nickname || 'Student'} size={80} className="shadow-xl" />
+                            <div>
+                              <input type="file" id="avatarUpload" accept="image/png, image/jpeg, image/webp" className="hidden" onChange={handleAvatarSelect} />
+                              <label htmlFor="avatarUpload" className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-semibold text-slate-200 cursor-pointer transition-colors">
+                                <UploadCloud className="h-4 w-4" /> Upload new image
+                              </label>
+                              {avatarError && <p className="text-[10px] text-red-400 mt-2">{avatarError}</p>}
+                            </div>
+                          </div>
+                        )}
+                      </div>
 
-          {/* 3. Study Year */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-2">Study Year (Calibrated for ISE 2026)</label>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              {(['year1', 'year2', 'year3', 'year4'] as StudyYear[]).map((yr) => (
-                <button
-                  key={yr}
-                  onClick={() => onYearChange(yr)}
-                  className={`py-2.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
-                    currentYear === yr ? 'bg-[#3ccb57] text-black border-[#3ccb57] shadow-[0_0_12px_rgba(60,203,87,0.3)]' : 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/10'
-                  }`}
-                >
-                  {yr.toUpperCase()}
-                </button>
-              ))}
-            </div>
-          </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-[11px] text-slate-400 mb-1">Nickname</label>
+                          <input type="text" value={editableNickname} onChange={(e) => setEditableNickname(e.target.value)} className="w-full p-3 rounded-xl bg-black/60 border border-white/10 text-xs text-white focus:outline-none focus:border-[#3ccb57]" />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] text-slate-400 mb-1">Real Name (Optional)</label>
+                          <input type="text" value={editableRealName} onChange={(e) => setEditableRealName(e.target.value)} className="w-full p-3 rounded-xl bg-black/60 border border-white/10 text-xs text-white focus:outline-none focus:border-[#3ccb57]" />
+                        </div>
+                      </div>
 
-          {/* 4. Google AI Studio Key */}
-          <div>
-            <div className="flex flex-wrap items-center gap-x-2 text-xs font-semibold text-slate-300 mb-1.5">
-              <span>Google AI Studio API Key (Local Device Storage)</span>
-              <ApiKeyTooltip />
-            </div>
-            <div className="flex flex-col sm:flex-row gap-2">
-              <input
-                type={showApiKey ? 'text' : 'password'}
-                autoComplete="new-password"
-                value={apiKeyInput}
-                onChange={(e) => setApiKeyInput(e.target.value)}
-                placeholder="AIzaSy..."
-                className="flex-1 p-2.5 rounded-xl bg-black/60 border border-white/10 text-xs text-white font-mono"
-              />
-              <button
-                type="button"
-                onClick={() => setShowApiKey((shown) => !shown)}
-                aria-label={showApiKey ? 'Hide API key' : 'Show API key'}
-                aria-pressed={showApiKey}
-                className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-black/60 px-3 py-2.5 text-xs text-slate-300 hover:text-white cursor-pointer"
-              >
-                {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                {showApiKey ? 'Hide' : 'Show'}
-              </button>
-              <button onClick={onSaveKey} className="px-5 py-2.5 rounded-xl font-bold text-xs bg-[#3ccb57] text-black cursor-pointer w-full sm:w-auto">
-                Save
-              </button>
-            </div>
-            {settingsStatus && <p className="text-xs text-[#3ccb57] mt-1">{settingsStatus}</p>}
-          </div>
+                      <div className="flex items-center justify-between border-t border-white/5 pt-4">
+                        <div>
+                          <span className="text-sm font-bold text-white block">Hide from Leaderboard</span>
+                          <span className="text-[11px] text-slate-400">Keep your performance private.</span>
+                        </div>
+                        <button type="button" onClick={() => setHideLeaderboard(!hideLeaderboard)} className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors cursor-pointer ${hideLeaderboard ? 'bg-amber-500' : 'bg-white/20'}`}>
+                          <span className={`inline-block h-4 w-4 transform rounded-full bg-black transition-transform ${hideLeaderboard ? 'translate-x-6' : 'translate-x-1'}`} />
+                        </button>
+                      </div>
 
-          {/* 5. Graphics & Performance */}
-          <div className="p-4 sm:p-5 rounded-xl bg-white/[0.02] border border-white/10 space-y-3">
-            <label className="block text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-              <span>🎨</span> Graphics &amp; Performance
-            </label>
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs text-[#3ccb57]">{profileMsg}</span>
+                        <button onClick={handleApplyProfile} className="px-6 py-2.5 rounded-xl font-bold text-xs bg-[#3ccb57] text-black hover:bg-[#4ade67] transition-all cursor-pointer">
+                          Save Profile
+                        </button>
+                      </div>
+                    </div>
+                  </div>
 
-            <div className="flex items-center justify-between">
-              <div>
-                <span className="text-xs font-bold text-white block">Background Vortex Animation</span>
-                <span className="text-[11px] text-slate-400">Disabling this may improve performance on slower devices.</span>
-              </div>
-              <button
-                type="button"
-                onClick={async () => {
-                  const newDisabled = !vortexDisabled;
-                  setVortexDisabled(newDisabled);
-                  onVortexToggled(newDisabled);
-                  await supabase.from('profiles').update({ disable_vortex: newDisabled }).eq('id', user.id);
-                }}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors cursor-pointer ${
-                  vortexDisabled ? 'bg-white/20' : 'bg-[#3ccb57]'
-                }`}
-              >
-                <span className={`inline-block h-4 w-4 transform rounded-full bg-black transition-transform ${vortexDisabled ? 'translate-x-1' : 'translate-x-6'}`} />
-              </button>
+                  <div>
+                    <h3 className="text-lg font-bold text-white mb-4">Security</h3>
+                    <div className="p-6 rounded-2xl bg-white/[0.02] border border-white/10 space-y-4">
+                      
+                      <div className="space-y-3">
+                        {/* CURRENT PASSWORD */}
+                        <div>
+                          <label className="block text-[11px] text-slate-400 mb-1">Current Password</label>
+                          <div className="relative">
+                            <input 
+                              type={showOldPassword ? 'text' : 'password'} 
+                              value={oldPassword} 
+                              onChange={(e) => setOldPassword(e.target.value)} 
+                              placeholder="Enter current password" 
+                              className="w-full p-3 pr-10 rounded-xl bg-black/60 border border-white/10 text-xs text-white focus:outline-none focus:border-[#3ccb57]" 
+                            />
+                            <button type="button" onClick={() => setShowOldPassword(!showOldPassword)} className="absolute inset-y-0 right-0 px-3 text-slate-400 hover:text-white cursor-pointer">
+                              {showOldPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* NEW PASSWORD */}
+                        <div>
+                          <label className="block text-[11px] text-slate-400 mb-1">New Password</label>
+                          <div className="relative">
+                            <input 
+                              type={showNewPassword ? 'text' : 'password'} 
+                              value={newPassword} 
+                              onChange={(e) => setNewPassword(e.target.value)} 
+                              placeholder="New Password (min 6 chars)" 
+                              className="w-full p-3 pr-10 rounded-xl bg-black/60 border border-white/10 text-xs text-white focus:outline-none focus:border-[#3ccb57]" 
+                            />
+                            <button type="button" onClick={() => setShowNewPassword(!showNewPassword)} className="absolute inset-y-0 right-0 px-3 text-slate-400 hover:text-white cursor-pointer">
+                              {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex justify-between items-center pt-2">
+                        <span className={`text-xs ${passwordMsg?.error ? 'text-red-400' : 'text-[#3ccb57]'}`}>{passwordMsg?.text}</span>
+                        <button onClick={handleApplyPassword} disabled={isUpdatingPassword} className="px-5 py-2.5 rounded-xl font-bold text-xs bg-white/10 text-white hover:bg-white/20 transition-all cursor-pointer disabled:opacity-50">
+                          {isUpdatingPassword ? 'Updating...' : 'Update Password'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* === DATA & STATISTICS TAB === */}
+              {activeTab === 'data' && (
+                <div className="space-y-8 animate-fade-in">
+                  <div>
+                    <h3 className="text-2xl font-bold text-white mb-1">Data & Curriculum</h3>
+                    <p className="text-xs text-slate-400 mb-6">Manage your educational cohort mapping.</p>
+
+                    <div className="p-6 rounded-2xl bg-white/[0.02] border border-white/10">
+                      <label className="block text-sm font-semibold text-white mb-1">Study Year</label>
+                      <p className="text-[11px] text-slate-400 mb-4">Calibrates AI generation difficulty and context based on your current ISE syllabus.</p>
+                      
+                      <div className="grid grid-cols-2 gap-3">
+                        {(['year1', 'year2', 'year3', 'year4'] as StudyYear[]).map((yr) => (
+                          <button
+                            key={yr}
+                            onClick={() => onYearChange(yr)}
+                            className={`py-3 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                              currentYear === yr ? 'bg-[#3ccb57] text-black border-[#3ccb57] shadow-[0_0_15px_rgba(60,203,87,0.2)]' : 'bg-black/40 border-white/10 text-slate-300 hover:bg-white/10'
+                            }`}
+                          >
+                            {yr.toUpperCase()}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* === VISUAL & PERFORMANCE TAB === */}
+              {/* === VISUAL & PERFORMANCE TAB === */}
+              {activeTab === 'visual' && (
+                <div className="space-y-8 animate-fade-in">
+                  <div>
+                    <h3 className="text-2xl font-bold text-white mb-1">Visual & Performance</h3>
+                    <p className="text-xs text-slate-400 mb-6">Customize the aesthetics and optimize rendering speed.</p>
+
+                    <div className="p-6 rounded-2xl bg-white/[0.02] border border-white/10 space-y-6">
+                      
+                      {/* Тройной переключатель оформления */}
+                      {/* 3 режима оформления */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div>
+                          <span className="text-sm font-bold text-white block">Стиль интерфейса</span>
+                          <span className="text-[11px] text-slate-400 mt-1 block max-w-sm">
+                            Обычный (оригинал), лёгкое стекло (сохраняет цвета сайта) или глубокий тёмный режим.
+                          </span>
+                        </div>
+                        <div className="flex bg-black/50 p-1 rounded-xl border border-white/10 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => onUiThemeToggled('standard')}
+                            className={`px-3 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                              uiTheme === 'standard'
+                                ? 'bg-[#3ccb57] text-black shadow-md'
+                                : 'text-slate-400 hover:text-white'
+                            }`}
+                          >
+                            Обычный
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => onUiThemeToggled('glass')}
+                            className={`px-3 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                              uiTheme === 'glass'
+                                ? 'bg-white/15 text-white border-t border-white/30 shadow-md'
+                                : 'text-slate-400 hover:text-white'
+                            }`}
+                          >
+                            Стекло
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => onUiThemeToggled('dark_glass')}
+                            className={`px-3 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                              uiTheme === 'dark_glass'
+                                ? 'bg-gradient-to-r from-[#5a2838] to-[#252230] text-white border-t border-red-400/40 shadow-md'
+                                : 'text-slate-400 hover:text-white'
+                            }`}
+                          >
+                            Тёмный
+                          </button>
+                        </div>
+                      </div>
+                      
+
+                      {/* Vortex Toggle */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-6 border-t border-white/5">
+                        <div>
+                          <span className="text-sm font-bold text-white block">Background Vortex Animation</span>
+                          <span className="text-[11px] text-slate-400 mt-1 block max-w-sm">Disable animated background to save battery and boost framerate.</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const newDisabled = !vortexDisabled;
+                            setVortexDisabled(newDisabled);
+                            onVortexToggled(newDisabled);
+                            await supabase.from('profiles').update({ disable_vortex: newDisabled }).eq('id', user.id);
+                          }}
+                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors cursor-pointer shrink-0 ${
+                            vortexDisabled ? 'bg-white/20' : 'bg-[#3ccb57]'
+                          }`}
+                        >
+                          <span className={`inline-block h-4 w-4 transform rounded-full bg-black transition-transform ${vortexDisabled ? 'translate-x-1' : 'translate-x-6'}`} />
+                        </button>
+                      </div>
+
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* === ADVANCED TAB === */}
+              {activeTab === 'advanced' && (
+                <div className="space-y-8 animate-fade-in">
+                  <div>
+                    <h3 className="text-2xl font-bold text-white mb-1">Advanced Controls</h3>
+                    <p className="text-xs text-slate-400 mb-6">API Keys and dangerous actions.</p>
+
+                    <div className="p-6 rounded-2xl bg-white/[0.02] border border-white/10 space-y-4 mb-8">
+                      <div className="flex flex-col gap-1 mb-2">
+                        <span className="text-sm font-bold text-white">Google AI Studio API Key</span>
+                        <span className="text-[11px] text-slate-400">Stored safely in local device storage. Required for generating tests.</span>
+                      </div>
+                      
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        <div className="relative flex-1">
+                          <input
+                            type={showApiKey ? 'text' : 'password'}
+                            value={apiKeyInput}
+                            onChange={(e) => setApiKeyInput(e.target.value)}
+                            placeholder="AIzaSy..."
+                            className="w-full p-3 pr-10 rounded-xl bg-black/60 border border-white/10 text-xs text-white font-mono focus:outline-none focus:border-[#3ccb57]"
+                          />
+                          <button type="button" onClick={() => setShowApiKey(!showApiKey)} className="absolute inset-y-0 right-0 px-3 text-slate-400 hover:text-white cursor-pointer">
+                            {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                          </button>
+                        </div>
+                        <button onClick={onSaveKey} className="px-6 py-3 rounded-xl font-bold text-xs bg-white/10 text-white hover:bg-white/20 cursor-pointer">
+                          Save Key
+                        </button>
+                      </div>
+                      {settingsStatus && <p className="text-xs text-[#3ccb57]">{settingsStatus}</p>}
+                    </div>
+
+                    <div className="p-6 rounded-2xl bg-red-950/20 border border-red-500/30">
+                      <h4 className="text-sm font-bold text-red-300 flex items-center gap-2 mb-2">
+                        <AlertTriangle className="h-4 w-4" /> Danger Zone
+                      </h4>
+                      <p className="text-xs text-slate-400 mb-5">
+                        Permanently delete your profile and test history. Submitted curriculum materials will remain anonymously in the library.
+                      </p>
+                      <button onClick={() => { setDeleteConfirmText(''); setDeleteAccountError(null); setShowDeleteModal(true); }} className="px-6 py-3 rounded-xl text-xs font-bold bg-red-600/20 hover:bg-red-600/40 text-red-300 border border-red-500/30 transition-colors cursor-pointer">
+                        Delete Account...
+                      </button>
+                    </div>
+
+                  </div>
+                </div>
+              )}
+
             </div>
-          </div>
-
-          {/* 6. DANGER ZONE */}
-          <div className="pt-4 border-t border-red-500/20">
-            <div className="p-4 sm:p-5 rounded-xl bg-red-950/20 border border-red-500/30 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-              <div>
-                <h4 className="text-xs font-bold text-red-300 flex items-center gap-1.5 uppercase tracking-wider">
-                  <Trash2 className="h-4 w-4 text-red-400" /> Danger Zone: Delete Account
-                </h4>
-                <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
-                  Permanently delete your profile and test history. Your uploaded curriculum slides will remain anonymously in the library.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setDeleteConfirmText('');
-                  setDeleteAccountError(null);
-                  setShowDeleteModal(true);
-                }}
-                className="px-5 py-2.5 rounded-xl text-xs font-bold bg-red-600/30 hover:bg-red-600/50 text-red-200 border border-red-500/40 transition-colors cursor-pointer shrink-0 w-full sm:w-auto"
-              >
-                Delete Account
-              </button>
-            </div>
-          </div>
-
-          <div className="pt-3 border-t border-white/10 flex justify-end">
-            <button onClick={onClose} className="px-6 py-2 rounded-xl text-xs text-slate-400 hover:text-white cursor-pointer">Close</button>
           </div>
         </div>
       </div>
 
+      {/* Окно подтверждения удаления аккаунта */}
       {showDeleteModal && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-fade-in text-left">
           <div className="w-full max-w-md rounded-2xl border border-red-500/40 bg-[#060c20] p-4 sm:p-6 space-y-4 shadow-2xl">
             <div className="flex items-center gap-2.5 text-red-400 border-b border-red-500/20 pb-3">
               <AlertTriangle className="h-5 w-5 shrink-0" />
-              <h4 className="text-sm font-bold text-white uppercase tracking-wider">
-                Confirm Permanent Account Deletion
-              </h4>
+              <h4 className="text-sm font-bold text-white uppercase tracking-wider">Confirm Account Deletion</h4>
             </div>
-
             <p className="text-xs text-slate-300 leading-relaxed">
-              This action is <strong className="text-red-400">permanent and cannot be undone</strong>. Your personal profile and test scores will be completely erased.
+              This action is <strong className="text-red-400">permanent and cannot be undone</strong>.
             </p>
-            {deleteAccountError && (
-              <p role="alert" className="rounded-lg border border-red-500/30 bg-red-950/30 p-3 text-xs text-red-200">
-                {deleteAccountError}
-              </p>
-            )}
-
-            <div className="p-3 rounded-xl bg-white/[0.02] border border-white/10 text-[11px] text-slate-400">
-              💡 <em>Note: Any lecture slides you contributed will remain anonymously in the community library for other students.</em>
-            </div>
-
+            {deleteAccountError && <p className="rounded-lg border border-red-500/30 bg-red-950/30 p-3 text-xs text-red-200">{deleteAccountError}</p>}
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-2 leading-relaxed">
-                To confirm, type <strong className="text-[#3ccb57] font-mono select-all">I want to delete this account</strong> below:
+              <label className="block text-xs font-semibold text-slate-300 mb-2">
+                Type <strong className="text-[#3ccb57] font-mono select-all">I want to delete this account</strong> below:
               </label>
-              <input
-                type="text"
-                autoFocus
-                value={deleteConfirmText}
-                onChange={(e) => setDeleteConfirmText(e.target.value)}
-                placeholder="I want to delete this account"
-                className="w-full p-3 rounded-xl bg-black/60 border border-white/20 text-xs font-mono text-white focus:outline-none focus:border-red-400 focus:ring-1 focus:ring-red-400"
-              />
+              <input type="text" autoFocus value={deleteConfirmText} onChange={(e) => setDeleteConfirmText(e.target.value)} placeholder="I want to delete this account" className="w-full p-3 rounded-xl bg-black/60 border border-white/20 text-xs font-mono text-white focus:outline-none focus:border-red-400" />
             </div>
-
             <div className="pt-2 flex justify-end gap-2 border-t border-white/10">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowDeleteModal(false);
-                  setDeleteConfirmText('');
-                }}
-                disabled={isDeletingAccount}
-                className="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-white cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleExecuteDeleteAccount}
-                disabled={deleteConfirmText !== REQUIRED_DELETE_PHRASE || isDeletingAccount}
-                className="px-5 py-2.5 rounded-xl font-bold text-xs bg-red-600 hover:bg-red-700 text-white transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1.5 shadow-lg"
-              >
-                {isDeletingAccount ? (
-                  <>
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    <span>Deleting...</span>
-                  </>
-                ) : (
-                  <span>Permanently Delete</span>
-                )}
+              <button type="button" onClick={() => setShowDeleteModal(false)} disabled={isDeletingAccount} className="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-white cursor-pointer">Cancel</button>
+              <button type="button" onClick={handleExecuteDeleteAccount} disabled={deleteConfirmText !== REQUIRED_DELETE_PHRASE || isDeletingAccount} className="px-5 py-2.5 rounded-xl font-bold text-xs bg-red-600 hover:bg-red-700 text-white transition-all disabled:opacity-40 cursor-pointer flex items-center gap-1.5">
+                {isDeletingAccount ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Deleting...</> : 'Permanently Delete'}
               </button>
             </div>
           </div>

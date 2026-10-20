@@ -96,12 +96,53 @@ export const Navbar: React.FC = () => (
   </header>
 );
 
-export const BackgroundGradients: React.FC<{ showVortex?: boolean }> = ({ showVortex = true }) => (
+export const BackgroundGradients: React.FC<{
+  showVortex?: boolean;
+  theme?: 'standard' | 'glass' | 'dark_glass';
+}> = React.memo(({ showVortex = true, theme = 'standard' }) => (
   <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden" aria-hidden="true">
-    <div className="absolute inset-0" style={{ background: 'linear-gradient(135deg, #020719 0%, #05193b 30%, #07313f 55%, #0a4d38 80%, #157342 100%)' }} />
-    <div className="absolute -bottom-24 -right-24 h-[650px] w-[650px] rounded-full blur-[140px] opacity-50" style={{ background: '#3ccb57' }} />
-    <div className="absolute -top-24 -left-24 h-[700px] w-[700px] rounded-full blur-[150px] opacity-70" style={{ background: '#0a2a7a' }} />
-    {showVortex && <VortexBackground />}
-    <div className="absolute bottom-0 right-0 w-96 h-1 bg-gradient-to-r from-transparent via-[#3ccb57]/50 to-[#3ccb57]" />
+    {/* Слой 1: Статичные градиенты (изолированы, 0% нагрузки на процессор) */}
+    <div className="absolute inset-0 overflow-hidden" style={{ isolation: 'isolate', contain: 'strict' }}>
+      {theme === 'dark_glass' ? (
+        <>
+          <div className="absolute inset-0 bg-[#080a10]" />
+          <div className="absolute -top-32 -left-32 h-[600px] w-[600px] rounded-full blur-[140px] opacity-30" style={{ background: '#722038' }} />
+          <div className="absolute -bottom-32 -right-32 h-[650px] w-[650px] rounded-full blur-[150px] opacity-25" style={{ background: '#25355a' }} />
+        </>
+      ) : theme === 'glass' ? (
+        <>
+          <div
+            className="absolute inset-0"
+            style={{
+              background:
+                'linear-gradient(135deg, #071026 0%, #071428 28%, #103644 55%, #0d362a 82%, #19663d 100%)',
+            }}
+          />
+          <div className="absolute -bottom-20 -right-20 h-[650px] w-[650px] rounded-full blur-[130px] opacity-50" style={{ background: '#34ba4c' }} />
+          <div className="absolute -top-20 -left-20 h-[700px] w-[700px] rounded-full blur-[140px] opacity-60" style={{ background: '#103a7d' }} />
+        </>
+      ) : (
+        <>
+          <div
+            className="absolute inset-0"
+            style={{
+              background:
+                'linear-gradient(135deg, #020719 0%, #05193b 30%, #07313f 55%, #0a4d38 80%, #157342 100%)',
+            }}
+          />
+          <div className="absolute -bottom-24 -right-24 h-[650px] w-[650px] rounded-full blur-[140px] opacity-50" style={{ background: '#2a993e' }} />
+          <div className="absolute -top-24 -left-24 h-[700px] w-[700px] rounded-full blur-[150px] opacity-70" style={{ background: '#0a2a7a' }} />
+        </>
+      )}
+    </div>
+
+    {/* Слой 2: Вортекс изолирован в собственном контейнере, не задевая карточки */}
+    <div className="absolute inset-0 overflow-hidden pointer-events-none" style={{ isolation: 'isolate', contain: 'strict' }}>
+      {showVortex && <VortexBackground />}
+    </div>
+
+    {theme !== 'dark_glass' && (
+      <div className="absolute bottom-0 right-0 w-96 h-1 bg-gradient-to-r from-transparent via-[#3ccb57]/50 to-[#3ccb57]" />
+    )}
   </div>
-);
+));

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Sparkles, KeyRound, Loader2, Rocket, EyeOff, Eye, AlertTriangle, LogOut } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import type { UserSession, StudyYear } from '../types/ise';
@@ -6,9 +6,17 @@ import { Navbar, BackgroundGradients, ApiKeyTooltip } from './common/LayoutCompo
 import { AuthCard } from './auth/AuthCard';
 import { AuthenticatedWorkspace } from './workspace/AuthenticatedWorkspace';
 
+export type VisualTheme = 'standard' | 'glass' | 'dark_glass';
+
 export default function ISEasyApp() {
   const [currentUser, setCurrentUser] = useState<UserSession | null>(null);
+  const currentUserRef = useRef<UserSession | null>(null);
+  currentUserRef.current = currentUser;
+
   const [securityError, setSecurityError] = useState<string | null>(null);
+
+  // 3 визуальных режима: standard (оригинал), glass (платиновое стекло), dark_glass (тёмный обсидиан)
+  const [uiTheme, setUiTheme] = useState<VisualTheme>('standard');
 
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [pendingSession, setPendingSession] = useState<any>(null);
@@ -20,6 +28,18 @@ export default function ISEasyApp() {
   const [onboardingApiKey, setOnboardingApiKey] = useState('');
   const [onboardingError, setOnboardingError] = useState<string | null>(null);
   const [isSavingOnboarding, setIsSavingOnboarding] = useState(false);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('revise_visual_theme') as VisualTheme;
+    if (saved === 'glass' || saved === 'dark_glass' || saved === 'standard') {
+      setUiTheme(saved);
+    }
+  }, []);
+
+  const handleThemeToggle = (theme: VisualTheme) => {
+    setUiTheme(theme);
+    localStorage.setItem('revise_visual_theme', theme);
+  };
 
   // 🛡️ Проверка реального верифицированного email в GitHub
   const verifyRealStudentEmail = async (session: any): Promise<string | null> => {
@@ -69,6 +89,11 @@ export default function ISEasyApp() {
         return;
       }
 
+      // 🛑 Защита: не трогаем интерфейс при фоновом обновлении токена
+      if (currentUserRef.current && currentUserRef.current.id === session.user.id) {
+        return;
+      }
+
       const verifiedStudentEmail = await verifyRealStudentEmail(session);
 
       if (!verifiedStudentEmail) {
@@ -83,12 +108,28 @@ export default function ISEasyApp() {
 
       setSecurityError(null);
 
-      // 🌟 ПОЛНАЯ ВЫГРУЗКА ПРОФИЛЯ (с флагом согласия лидерборда и реальным именем)
-      const { data: prof } = await supabase
-        .from('profiles')
-        .select('nickname, study_year, real_name, leaderboard_accepted, hide_from_leaderboard, disable_vortex')
-        .eq('id', session.user.id)
-        .single();
+      let prof: any = null;
+
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('nickname, study_year, real_name, leaderboard_accepted, hide_from_leaderboard, disable_vortex, avatar_url')
+          .eq('id', session.user.id)
+          .single();
+
+        if (error && error.code !== 'PGRST116') {
+          const { data: safeData } = await supabase
+            .from('profiles')
+            .select('nickname, study_year, real_name, leaderboard_accepted, hide_from_leaderboard, disable_vortex')
+            .eq('id', session.user.id)
+            .single();
+          prof = safeData;
+        } else {
+          prof = data;
+        }
+      } catch (err) {
+        console.error('[revISE Auth] Error fetching profile:', err);
+      }
 
       const localKey = localStorage.getItem('gemini_api_key');
 
@@ -113,13 +154,14 @@ export default function ISEasyApp() {
         setCurrentUser({
           id: session.user.id,
           email: verifiedStudentEmail,
-          nickname: prof.nickname,
-          realName: prof.real_name || undefined,
-          studyYear: (prof.study_year as StudyYear) || 'year1',
-          leaderboardAccepted: prof.leaderboard_accepted || false,
-          hideFromLeaderboard: prof.hide_from_leaderboard || false,
+          nickname: prof?.nickname,
+          realName: prof?.real_name || undefined,
+          studyYear: (prof?.study_year as StudyYear) || 'year1',
+          leaderboardAccepted: prof?.leaderboard_accepted || false,
+          hideFromLeaderboard: prof?.hide_from_leaderboard || false,
           apiKey: localKey || undefined,
-          disableVortex: prof.disable_vortex || false,
+          disableVortex: prof?.disable_vortex || false,
+          avatarUrl: prof?.avatar_url || undefined,
         });
       }
 
@@ -135,7 +177,10 @@ export default function ISEasyApp() {
 
     fetchSession();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    // 🛡️ Безопасный слушатель сессии
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'TOKEN_REFRESHED' && currentUserRef.current) return;
+      if (event === 'USER_UPDATED' && currentUserRef.current) return;
       await validateAndSetSession(session);
     });
 
@@ -158,28 +203,31 @@ export default function ISEasyApp() {
 
     setIsSavingOnboarding(true);
 
-    const { error: pwdError } = await supabase.auth.updateUser({
-      password: onboardingPassword,
-    });
-
-    if (pwdError) {
-      setIsSavingOnboarding(false);
-      setOnboardingError('Failed to set password: ' + pwdError.message);
-      return;
-    }
-
     const cleanNick = onboardingNickname.trim() || 'Student';
     const cleanKey = onboardingApiKey.trim();
 
+    // 1. Сначала сохраняем профиль
     const { error: profileError } = await supabase.from('profiles').upsert({
       id: pendingSession.session.user.id,
       email: pendingSession.email,
       nickname: cleanNick,
       study_year: onboardingYear,
     });
+
     if (profileError) {
       setIsSavingOnboarding(false);
       setOnboardingError(`Could not save your profile: ${profileError.message}`);
+      return;
+    }
+
+    // 2. Затем обновляем пароль
+    const { error: pwdError } = await supabase.auth.updateUser({
+      password: onboardingPassword,
+    });
+
+    if (pwdError) {
+      setIsSavingOnboarding(false);
+      setOnboardingError('Profile saved, but failed to set password: ' + pwdError.message);
       return;
     }
 
@@ -208,9 +256,139 @@ export default function ISEasyApp() {
     setPendingSession(null);
   };
 
+  const rootThemeClass = uiTheme === 'dark_glass' ? 'theme-dark-glass' : uiTheme === 'glass' ? 'theme-glass' : '';
+
   return (
-    <div className="relative min-h-[100dvh] h-screen w-full overflow-hidden text-slate-100 selection:bg-[#3ccb57]/30 selection:text-white flex flex-col justify-between">
-      <BackgroundGradients showVortex={!currentUser?.disableVortex} />
+    <div className={`relative min-h-[100dvh] h-screen w-full overflow-hidden text-slate-100 selection:bg-[#3ccb57]/30 selection:text-white flex flex-col justify-between ${rootThemeClass}`}>
+      
+      {/* 💎 ПЛАТИНОВОЕ СТЕКЛО ДЛЯ ВСЕХ ОКОН И НАСТРОЕК 💎 */}
+      {uiTheme !== 'standard' && (
+        <style>{`
+          /* Отключаем лагающие GPU-блюры */
+          .theme-glass .backdrop-blur-md,
+          .theme-glass .backdrop-blur-xl,
+          .theme-glass .backdrop-blur-2xl,
+          .theme-glass .backdrop-blur-3xl,
+          .theme-dark-glass .backdrop-blur-md,
+          .theme-dark-glass .backdrop-blur-xl,
+          .theme-dark-glass .backdrop-blur-2xl,
+          .theme-dark-glass .backdrop-blur-3xl {
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
+          }
+
+          /* 1. РЕЖИМ «СТЕКЛО» (Оптимальная плотность 90%, световая фаска, 0% потери плавности) */
+          .theme-glass .bg-\\[\\#060c20\\]\\/90,
+          .theme-glass .bg-\\[\\#060c20\\]\\/85,
+          .theme-glass .bg-\\[\\#060c20\\]\\/80,
+          .theme-glass .bg-\\[\\#060c20\\]\\/98,
+          .theme-glass .bg-\\[\\#060c20\\] {
+            background: linear-gradient(145deg, rgba(22, 34, 54, 0.88) 0%, rgba(9, 15, 28, 0.94) 100%) !important;
+            border-top: 1px solid rgba(255, 255, 255, 0.22) !important;
+            border-left: 1px solid rgba(255, 255, 255, 0.08) !important;
+            border-right: 1px solid rgba(255, 255, 255, 0.04) !important;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.6) !important;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 12px 28px rgba(0, 0, 0, 0.35) !important;
+            contain: paint !important;
+          }
+
+          /* Шапка сайта */
+          .theme-glass .bg-\\[\\#080b14\\]\\/95 {
+            background: linear-gradient(to right, rgba(14, 20, 34, 0.94), rgba(8, 12, 22, 0.98)) !important;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+          }
+
+          /* 🌟 ТЕПЕРЬ И КАРТОЧКИ ВНУТРИ НАСТРОЕК СТАЛИ СТЕКЛЯННЫМИ! 🌟 */
+          .theme-glass .bg-white\\/\\[0\\.02\\] {
+            background: linear-gradient(140deg, rgba(255, 255, 255, 0.09) 0%, rgba(24, 38, 64, 0.65) 24%, rgba(10, 18, 36, 0.82) 70%, rgba(6, 12, 26, 0.9) 100%) !important;
+            border-top: 1px solid rgba(255, 255, 255, 0.22) !important;
+            border-left: 1px solid rgba(255, 255, 255, 0.1) !important;
+            border-right: 1px solid rgba(255, 255, 255, 0.05) !important;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.6) !important;
+            box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.12), inset 0 -1px 0 rgba(0, 0, 0, 0.4), 0 14px 32px rgba(0, 0, 0, 0.4) !important;
+          }
+
+          /* Главная панель окна настроек */
+          .theme-glass .bg-\\[\\#080d1e\\] {
+            background: linear-gradient(150deg, rgba(20, 32, 54, 0.92) 0%, rgba(8, 14, 28, 0.97) 100%) !important;
+            border-top: 1px solid rgba(255, 255, 255, 0.22) !important;
+            border-right: 1px solid rgba(255, 255, 255, 0.05) !important;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.6) !important;
+            box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.12), 0 20px 50px rgba(0, 0, 0, 0.5) !important;
+          }
+
+          /* Боковая колонка настроек (Sidebar) */
+          .theme-glass .bg-\\[\\#040816\\] { 
+            background: linear-gradient(180deg, rgba(16, 26, 44, 0.96) 0%, rgba(7, 12, 22, 0.98) 100%) !important;
+            border-top: 1px solid rgba(255, 255, 255, 0.22) !important;
+            border-left: 1px solid rgba(255, 255, 255, 0.1) !important;
+            border-right: 1px solid rgba(255, 255, 255, 0.08) !important;
+          }
+
+          /* Кнопка "Close Settings" */
+          .theme-glass button.bg-white\\/5 {
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%) !important;
+            border: 1px solid rgba(255, 255, 255, 0.12) !important;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+          }
+          .theme-glass button.bg-white\\/5:hover {
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.05) 100%) !important;
+            border-color: rgba(255, 255, 255, 0.24) !important;
+          }
+
+          /* Активная вкладка в меню настроек */
+          .theme-glass .bg-\\[\\#3ccb57\\]\\/10 {
+            background: linear-gradient(135deg, rgba(60, 203, 87, 0.18) 0%, rgba(60, 203, 87, 0.05) 100%) !important;
+            border: 1px solid rgba(60, 203, 87, 0.3) !important;
+            box-shadow: 0 0 15px rgba(60, 203, 87, 0.1) !important;
+          }
+
+          /* Внутренние инпуты */
+          .theme-glass .bg-black\\/60,
+          .theme-glass .bg-black\\/50,
+          .theme-glass .bg-black\\/40 {
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, rgba(0, 0, 0, 0.35) 100%) !important;
+            border-top: 1px solid rgba(0, 0, 0, 0.7) !important;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+            box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.4) !important;
+          }
+
+          /* 2. РЕЖИМ «ТЁМНЫЙ ОБСИДИАН» */
+          .theme-dark-glass .bg-\\[\\#060c20\\]\\/90,
+          .theme-dark-glass .bg-\\[\\#060c20\\]\\/85,
+          .theme-dark-glass .bg-\\[\\#060c20\\]\\/80,
+          .theme-dark-glass .bg-\\[\\#060c20\\]\\/98,
+          .theme-dark-glass .bg-\\[\\#060c20\\] {
+            background: linear-gradient(145deg, rgba(26, 20, 26, 0.92) 0%, rgba(10, 8, 12, 0.96) 100%) !important;
+            border-top: 1px solid rgba(255, 255, 255, 0.14) !important;
+            border-left: 1px solid rgba(255, 255, 255, 0.04) !important;
+            border-right: 1px solid rgba(255, 255, 255, 0.04) !important;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.7) !important;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 14px 32px rgba(0, 0, 0, 0.5) !important;
+            contain: paint !important;
+          }
+
+          .theme-dark-glass .bg-\\[\\#080b14\\]\\/95 {
+            background: linear-gradient(to right, rgba(18, 14, 18, 0.95), rgba(9, 7, 10, 0.98)) !important;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+          }
+
+          /* Инпуты */
+          .theme-glass .bg-black\\/60, .theme-dark-glass .bg-black\\/60 {
+            background: rgba(0, 0, 0, 0.4) !important;
+            border-top: 1px solid rgba(0, 0, 0, 0.7) !important;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+          }
+
+          /* Наведение на кнопки в тёмном режиме */
+          .theme-dark-glass .hover\\:border-\\[\\#3ccb57\\]\\/50:hover {
+            border-color: rgba(180, 75, 100, 0.5) !important;
+            box-shadow: 0 0 20px rgba(180, 75, 100, 0.15) !important;
+          }
+        `}</style>
+      )}
+
+      <BackgroundGradients showVortex={!currentUser?.disableVortex} theme={uiTheme} />
 
       <div className="relative z-10 flex flex-col h-full w-full justify-between overflow-hidden">
         {!currentUser && <Navbar />}
@@ -225,6 +403,8 @@ export default function ISEasyApp() {
               }}
               onApiKeyUpdated={(k) => setCurrentUser((prev) => (prev ? { ...prev, apiKey: k } : null))}
               onVortexToggled={(disabled) => setCurrentUser((prev) => (prev ? { ...prev, disableVortex: disabled } : null))}
+              uiTheme={uiTheme}
+              onUiThemeToggled={handleThemeToggle}
             />
           ) : (
             <AuthCard
@@ -233,7 +413,6 @@ export default function ISEasyApp() {
             />
           )}
         </main>
-
       </div>
 
       {showOnboarding && (
