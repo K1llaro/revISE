@@ -126,7 +126,7 @@ export const AuthenticatedWorkspace: React.FC<{
   onApiKeyUpdated: (k: string) => void;
   onVortexToggled: (disabled: boolean) => void;
   uiTheme: 'standard' | 'glass' | 'dark_glass';
-  onUiThemeToggled: (theme: 'standard' | 'glass' | 'dark_glass') => void;
+  onUiThemeToggled: (theme: 'standard' | 'glass') => void;
 }> = ({ user, onSignOut, onApiKeyUpdated, onVortexToggled, uiTheme, onUiThemeToggled }) => {
   const [currentView, setCurrentView] = useState<AppView>('station');
   const [activeModal, setActiveModal] = useState<ActiveModal>('none');

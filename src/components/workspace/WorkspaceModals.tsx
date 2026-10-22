@@ -1677,7 +1677,7 @@ export const SettingsModal: React.FC<{
   settingsStatus: string | null;
   onVortexToggled: (disabled: boolean) => void;
   uiTheme: 'standard' | 'glass' | 'dark_glass';
-  onUiThemeToggled: (theme: 'standard' | 'glass' | 'dark_glass') => void;
+  onUiThemeToggled: (theme: 'standard' | 'glass' ) => void;
 }> = ({ isOpen, onClose, user, onProfileUpdated, currentYear, onYearChange, apiKeyInput, setApiKeyInput, onSaveKey, settingsStatus, onVortexToggled, uiTheme, onUiThemeToggled }) => {
   const [activeTab, setActiveTab] = useState<'account' | 'data' | 'visual' | 'advanced'>('account');
   
@@ -2025,17 +2025,6 @@ export const SettingsModal: React.FC<{
                             }`}
                           >
                             Стекло
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => onUiThemeToggled('dark_glass')}
-                            className={`px-3 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                              uiTheme === 'dark_glass'
-                                ? 'bg-gradient-to-r from-[#5a2838] to-[#252230] text-white border-t border-red-400/40 shadow-md'
-                                : 'text-slate-400 hover:text-white'
-                            }`}
-                          >
-                            Тёмный
                           </button>
                         </div>
                       </div>

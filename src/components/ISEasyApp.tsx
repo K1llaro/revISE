@@ -277,89 +277,16 @@ export default function ISEasyApp() {
             -webkit-backdrop-filter: none !important;
           }
 
-          /* 1. РЕЖИМ «СТЕКЛО» (Оптимальная плотность 90%, световая фаска, 0% потери плавности) */
+          /* ========================================================
+             1. РЕЖИМ «СТЕКЛО» (Структура 1 в 1 как у Тёмного, но в синей гамме)
+             ======================================================== */
           .theme-glass .bg-\\[\\#060c20\\]\\/90,
           .theme-glass .bg-\\[\\#060c20\\]\\/85,
           .theme-glass .bg-\\[\\#060c20\\]\\/80,
           .theme-glass .bg-\\[\\#060c20\\]\\/98,
-          .theme-glass .bg-\\[\\#060c20\\] {
-            background: linear-gradient(145deg, rgba(22, 34, 54, 0.88) 0%, rgba(9, 15, 28, 0.94) 100%) !important;
-            border-top: 1px solid rgba(255, 255, 255, 0.22) !important;
-            border-left: 1px solid rgba(255, 255, 255, 0.08) !important;
-            border-right: 1px solid rgba(255, 255, 255, 0.04) !important;
-            border-bottom: 1px solid rgba(0, 0, 0, 0.6) !important;
-            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 12px 28px rgba(0, 0, 0, 0.35) !important;
-            contain: paint !important;
-          }
-
-          /* Шапка сайта */
-          .theme-glass .bg-\\[\\#080b14\\]\\/95 {
-            background: linear-gradient(to right, rgba(14, 20, 34, 0.94), rgba(8, 12, 22, 0.98)) !important;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
-          }
-
-          /* 🌟 ТЕПЕРЬ И КАРТОЧКИ ВНУТРИ НАСТРОЕК СТАЛИ СТЕКЛЯННЫМИ! 🌟 */
+          .theme-glass .bg-\\[\\#060c20\\],
           .theme-glass .bg-white\\/\\[0\\.02\\] {
-            background: linear-gradient(140deg, rgba(255, 255, 255, 0.09) 0%, rgba(24, 38, 64, 0.65) 24%, rgba(10, 18, 36, 0.82) 70%, rgba(6, 12, 26, 0.9) 100%) !important;
-            border-top: 1px solid rgba(255, 255, 255, 0.22) !important;
-            border-left: 1px solid rgba(255, 255, 255, 0.1) !important;
-            border-right: 1px solid rgba(255, 255, 255, 0.05) !important;
-            border-bottom: 1px solid rgba(0, 0, 0, 0.6) !important;
-            box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.12), inset 0 -1px 0 rgba(0, 0, 0, 0.4), 0 14px 32px rgba(0, 0, 0, 0.4) !important;
-          }
-
-          /* Главная панель окна настроек */
-          .theme-glass .bg-\\[\\#080d1e\\] {
-            background: linear-gradient(150deg, rgba(20, 32, 54, 0.92) 0%, rgba(8, 14, 28, 0.97) 100%) !important;
-            border-top: 1px solid rgba(255, 255, 255, 0.22) !important;
-            border-right: 1px solid rgba(255, 255, 255, 0.05) !important;
-            border-bottom: 1px solid rgba(0, 0, 0, 0.6) !important;
-            box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.12), 0 20px 50px rgba(0, 0, 0, 0.5) !important;
-          }
-
-          /* Боковая колонка настроек (Sidebar) */
-          .theme-glass .bg-\\[\\#040816\\] { 
-            background: linear-gradient(180deg, rgba(16, 26, 44, 0.96) 0%, rgba(7, 12, 22, 0.98) 100%) !important;
-            border-top: 1px solid rgba(255, 255, 255, 0.22) !important;
-            border-left: 1px solid rgba(255, 255, 255, 0.1) !important;
-            border-right: 1px solid rgba(255, 255, 255, 0.08) !important;
-          }
-
-          /* Кнопка "Close Settings" */
-          .theme-glass button.bg-white\\/5 {
-            background: linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%) !important;
-            border: 1px solid rgba(255, 255, 255, 0.12) !important;
-            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
-          }
-          .theme-glass button.bg-white\\/5:hover {
-            background: linear-gradient(180deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.05) 100%) !important;
-            border-color: rgba(255, 255, 255, 0.24) !important;
-          }
-
-          /* Активная вкладка в меню настроек */
-          .theme-glass .bg-\\[\\#3ccb57\\]\\/10 {
-            background: linear-gradient(135deg, rgba(60, 203, 87, 0.18) 0%, rgba(60, 203, 87, 0.05) 100%) !important;
-            border: 1px solid rgba(60, 203, 87, 0.3) !important;
-            box-shadow: 0 0 15px rgba(60, 203, 87, 0.1) !important;
-          }
-
-          /* Внутренние инпуты */
-          .theme-glass .bg-black\\/60,
-          .theme-glass .bg-black\\/50,
-          .theme-glass .bg-black\\/40 {
-            background: linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, rgba(0, 0, 0, 0.35) 100%) !important;
-            border-top: 1px solid rgba(0, 0, 0, 0.7) !important;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
-            box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.4) !important;
-          }
-
-          /* 2. РЕЖИМ «ТЁМНЫЙ ОБСИДИАН» */
-          .theme-dark-glass .bg-\\[\\#060c20\\]\\/90,
-          .theme-dark-glass .bg-\\[\\#060c20\\]\\/85,
-          .theme-dark-glass .bg-\\[\\#060c20\\]\\/80,
-          .theme-dark-glass .bg-\\[\\#060c20\\]\\/98,
-          .theme-dark-glass .bg-\\[\\#060c20\\] {
-            background: linear-gradient(145deg, rgba(26, 20, 26, 0.92) 0%, rgba(10, 8, 12, 0.96) 100%) !important;
+            background: linear-gradient(145deg, rgba(20, 30, 48, 0.92) 0%, rgba(8, 14, 26, 0.96) 100%) !important;
             border-top: 1px solid rgba(255, 255, 255, 0.14) !important;
             border-left: 1px solid rgba(255, 255, 255, 0.04) !important;
             border-right: 1px solid rgba(255, 255, 255, 0.04) !important;
@@ -368,22 +295,43 @@ export default function ISEasyApp() {
             contain: paint !important;
           }
 
-          .theme-dark-glass .bg-\\[\\#080b14\\]\\/95 {
-            background: linear-gradient(to right, rgba(18, 14, 18, 0.95), rgba(9, 7, 10, 0.98)) !important;
+          /* Шапка сайта */
+          .theme-glass .bg-\\[\\#080b14\\]\\/95 {
+            background: linear-gradient(to right, rgba(14, 22, 36, 0.95), rgba(8, 12, 22, 0.98)) !important;
             border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
           }
 
-          /* Инпуты */
-          .theme-glass .bg-black\\/60, .theme-dark-glass .bg-black\\/60 {
-            background: rgba(0, 0, 0, 0.4) !important;
-            border-top: 1px solid rgba(0, 0, 0, 0.7) !important;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+          /* Окно настроек */
+          .theme-glass .bg-\\[\\#080d1e\\] {
+            background: linear-gradient(155deg, rgba(16, 25, 42, 0.96) 0%, rgba(8, 12, 22, 0.98) 100%) !important;
+            border-top: 1px solid rgba(255, 255, 255, 0.14) !important;
+          }
+          .theme-glass .bg-\\[\\#040816\\] { 
+            background: rgba(10, 15, 26, 0.96) !important; 
+            border-right: 1px solid rgba(255, 255, 255, 0.06) !important;
           }
 
-          /* Наведение на кнопки в тёмном режиме */
-          .theme-dark-glass .hover\\:border-\\[\\#3ccb57\\]\\/50:hover {
-            border-color: rgba(180, 75, 100, 0.5) !important;
-            box-shadow: 0 0 20px rgba(180, 75, 100, 0.15) !important;
+          /* ========================================================
+             ОБЩИЕ ИСПРАВЛЕНИЯ ДЛЯ ОБОИХ РЕЖИМОВ (Инпуты, дропзона, фокус)
+             ======================================================== */
+          .theme-glass .bg-black\\/60, .theme-glass .bg-black\\/50, .theme-glass .bg-black\\/40,
+          .theme-dark-glass .bg-black\\/60, .theme-dark-glass .bg-black\\/50, .theme-dark-glass .bg-black\\/40 {
+            background: rgba(0, 0, 0, 0.35) !important;
+            box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.5) !important;
+          }
+
+          /* Зеленая рамка активного поля ввода со всех 4 сторон */
+          .theme-glass input:focus, .theme-glass textarea:focus,
+          .theme-dark-glass input:focus, .theme-dark-glass textarea:focus {
+            border-color: #3ccb57 !important;
+            box-shadow: 0 0 0 1px #3ccb57, 0 0 14px rgba(60, 203, 87, 0.25) !important;
+            outline: none !important;
+          }
+
+          /* Пунктир дропзоны целый со всех 4 сторон */
+          .theme-glass .border-dashed, .theme-dark-glass .border-dashed {
+            border-style: dashed !important;
+            border-width: 2px !important;
           }
         `}</style>
       )}
