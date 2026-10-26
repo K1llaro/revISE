@@ -467,6 +467,47 @@ export const AuthenticatedWorkspace: React.FC<{
     }
   };
 
+  const handleFetchHistoryDetails = async (id: string) => {
+    const existing = historyList.find((h) => h.id === id);
+    // Если детали уже загружены, не делаем запрос
+    if (existing && existing.details) return;
+
+    const { data, error } = await supabase
+      .from('test_history')
+      .select('ai_feedback')
+      .eq('id', id)
+      .single();
+
+    if (error || !data) return;
+
+    let parsedDetails: QuestionReviewDetail[] | undefined = undefined;
+    let parsedAdvice: string | undefined = undefined;
+    const rawFeedback = data.ai_feedback || '';
+
+    if (rawFeedback.startsWith('{')) {
+      try {
+        const obj = JSON.parse(rawFeedback);
+        parsedDetails = obj.details;
+        parsedAdvice = obj.weakSpotsAdvice;
+      } catch (e) {}
+    }
+
+    setHistoryList((prev) =>
+      prev.map((h) =>
+        h.id === id
+          ? {
+              ...h,
+              aiFeedback: rawFeedback,
+              weakSpotsAdvice: parsedAdvice,
+              details: parsedDetails, // Теперь детали точно сохраняются в стейт!
+            }
+          : h
+      )
+    );
+  };
+
+  useEffect(() => { loadData(); }, [user.id]);
+
   useEffect(() => { loadData(); }, [user.id]);
   useEffect(() => {
     if (activeModal === 'quiz') void loadAvailableTags();
@@ -950,6 +991,7 @@ Use only the exact "type" values "multiple", "text", and "single". Do not omit a
       reviewDetails.push({
         questionText: q.question,
         codeSnippet: q.codeSnippet,
+        options: q.options, // <--- СОХРАНЯЕМ ВАРИАНТЫ
         userAnswer: selected,
         correctAnswers: q.correctAnswers,
         isCorrect,
@@ -959,19 +1001,27 @@ Use only the exact "type" values "multiple", "text", and "single". Do not omit a
         slideTitle: q.slideTitle,
         questionType: q.type,
         responseTimeSeconds: questionResponseTimesRef.current[q.id],
-      });
+      } as any); 
     });
 
-    const finalScore = Math.max(0, Math.min(100, Math.round((scoreTotal / activeQuiz.questions.length) * 100)));
-    const earnedPoints = calculatePoints(finalScore, 'Standard');
+    let finalScore = Math.max(0, Math.min(100, Math.round((scoreTotal / activeQuiz.questions.length) * 100)));
+    let earnedPoints = calculatePoints(finalScore, 'Standard');
     const elapsedSeconds = quizStartedAtRef.current
       ? Math.max(1, Math.round((Date.now() - quizStartedAtRef.current) / 1000))
       : activeQuiz.timeLimit * 60;
 
-    const wrongQuestions = reviewDetails.filter((r) => !r.isCorrect);
     let weakSpotsAdvice = 'Excellent performance! You mastered all tested concepts.';
+    const wrongQuestions = reviewDetails.filter((r) => !r.isCorrect);
     if (wrongQuestions.length > 0) {
       weakSpotsAdvice = `Review topics: ${wrongQuestions.map((w, idx) => `Q${idx + 1} (${w.questionText.slice(0, 50)}...)`).join('; ')}. Re-examine corresponding lecture slides!`;
+    }
+
+    // 🛡️ FRONTEND ANTI-CHEAT: Защита от автокликеров (минимум 1.5 секунды на вопрос)
+    const minimumPlausibleTime = activeQuiz.questions.length * 1.5;
+    if (elapsedSeconds < minimumPlausibleTime) {
+      finalScore = 0;
+      earnedPoints = 0;
+      weakSpotsAdvice = "⚠️ SECURITY FLAG: Quiz completed suspiciously fast. Score invalidated.";
     }
 
     const payloadFeedback = JSON.stringify({
@@ -994,7 +1044,7 @@ Use only the exact "type" values "multiple", "text", and "single". Do not omit a
     });
 
     if (error) {
-      alert(`Could not save quiz results: ${error.message}`);
+      alert(`Could not save quiz results. Server RLS blocked the insertion: ${error.message}`);
       return;
     }
 
@@ -1537,15 +1587,16 @@ Output strictly as JSON without markdown:
 
   return (
     <div className={`w-full h-full min-h-0 flex flex-col text-left ${workspaceMode === 'learn' && currentView === 'station' ? 'bg-[#111111]' : ''}`}>
-      <header className="relative z-40 shrink-0 border-b border-white/10 bg-[#080b14]/95 backdrop-blur-xl px-3 sm:px-5 py-2.5">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-          <div className="flex items-center justify-between gap-3">
-            <button type="button" onClick={() => { setCurrentView('station'); setWorkspaceMode('home'); }} className="flex min-w-0 items-center gap-3 text-left cursor-pointer">
-              <img src="/favicon.svg" alt="revISE logo" className="h-9 w-9 shrink-0 object-contain" />
-              <span className="min-w-0"><span className="block text-base font-black text-white">rev<span className="text-[#3ccb57]">ISE</span></span><span className="block truncate text-[11px] text-slate-500">{user.nickname || user.email} · {user.apiKey ? 'AI Studio active' : 'No AI key'}</span></span>
-            </button>
-            <span className="hidden sm:inline-flex rounded-full border border-[#3ccb57]/30 bg-[#3ccb57]/10 px-2.5 py-1 text-[10px] font-mono font-bold uppercase text-[#3ccb57]">{currentYear}</span>
-          </div>
+      {currentView === 'station' && (
+        <header className="relative z-40 shrink-0 border-b border-white/10 bg-[#080b14]/95 backdrop-blur-xl px-3 sm:px-5 py-2.5">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+            <div className="flex items-center justify-between gap-3">
+              <button type="button" onClick={() => { setCurrentView('station'); setWorkspaceMode('home'); }} className="flex min-w-0 items-center gap-3 text-left cursor-pointer">
+                <img src="/favicon.svg" alt="revISE logo" className="h-9 w-9 shrink-0 object-contain" />
+                <span className="min-w-0"><span className="block text-base font-black text-white">rev<span className="text-[#3ccb57]">ISE</span></span><span className="block truncate text-[11px] text-slate-500">{user.nickname || user.email} · {user.apiKey ? 'AI Studio active' : 'No AI key'}</span></span>
+              </button>
+              <span className="hidden sm:inline-flex rounded-full border border-[#3ccb57]/30 bg-[#3ccb57]/10 px-2.5 py-1 text-[10px] font-mono font-bold uppercase text-[#3ccb57]">{currentYear}</span>
+            </div>
           <div className="flex items-center gap-2 flex-wrap lg:justify-end">
             {isAdmin && <button type="button" onClick={() => { loadData(); setActiveModal('admin'); }} className="inline-flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-950/20 px-3 py-2 text-xs font-bold text-amber-300 hover:bg-amber-950/40 cursor-pointer"><Shield className="h-4 w-4" /><span>Admin ({flaggedItems.length})</span></button>}
             <button type="button" onClick={() => { fetchLeaderboardData(); setActiveModal('leaderboard'); }} className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-slate-200 hover:bg-white/10 cursor-pointer"><Trophy className="h-4 w-4 text-[#3ccb57]" /><span>Leaderboard</span></button>
@@ -1606,7 +1657,7 @@ Output strictly as JSON without markdown:
           </div>
         </div>
       </header>
-
+      )}
       <main className="flex-1 min-h-0 w-full overflow-hidden flex flex-col">
         {pageContent}
       </main>
@@ -1670,6 +1721,7 @@ Output strictly as JSON without markdown:
       <HistoryModal
         isOpen={activeModal === 'history'} onClose={() => setActiveModal('none')}
         historyList={historyList} onStartWeakQuiz={handleStartWeakQuiz}
+        onFetchDetails={handleFetchHistoryDetails}
       />
       <SettingsModal
         isOpen={activeModal === 'settings'} onClose={() => setActiveModal('none')}

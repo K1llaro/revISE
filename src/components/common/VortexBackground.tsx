@@ -1,6 +1,5 @@
 import React, { useEffect, useRef } from 'react';
 
-// Текст, который непрерывно закручивается в спираль (отсылка к Bohemian Rhapsody + revISE)
 const SPIRAL_TEXT =
   "Open your potential! " +
   "Stop reading this. Go and study! " +
@@ -24,54 +23,47 @@ export const VortexBackground: React.FC = () => {
     const ctx = canvas.getContext('2d', { alpha: true });
     if (!ctx) return;
 
-    let animId: number;
+    let animId: number | null = null;
+    let isRunning = true;
     let width = 0;
     let height = 0;
     let cx = 0;
     let cy = 0;
 
-    // Оффскрин-холст для предварительной отрисовки (гарантирует отсутствие лагов)
     let offCanvas: HTMLCanvasElement | null = null;
     let offSize = 0;
     let textGradient: CanvasGradient | null = null;
 
-    // Создаем спираль из чисто белых букв с прозрачностями
+    // 1. Ограничиваем DPR единицей: фоновому эффекту не нужно 4K-разрешение
     const bakeSpiral = () => {
       width = window.innerWidth;
       height = window.innerHeight;
       cx = width / 2;
       cy = height / 2;
 
-      const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
-      canvas.width = Math.floor(width * dpr);
-      canvas.height = Math.floor(height * dpr);
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      canvas.width = width;
+      canvas.height = height;
 
-      // Создаем градиент для динамической раскраски:
-      // Слева (на синем фоне) -> Зелёный
-      // Справа (на зелёном фоне) -> Ярко-голубой
       textGradient = ctx.createLinearGradient(0, 0, width, 0);
-      textGradient.addColorStop(0, '#3c4acb44');    // Неоновый зеленый слева
-      textGradient.addColorStop(0.44, '#4a4fde2e'); // Мягкий переход к центру
-      textGradient.addColorStop(0.56, '#38f8a823'); // Переход в небесно-голубой
-      textGradient.addColorStop(1, '#02c73d21');    // Насыщенный синий справа
+      textGradient.addColorStop(0, '#3c4acb44');
+      textGradient.addColorStop(0.44, '#4a4fde2e');
+      textGradient.addColorStop(0.56, '#38f8a823');
+      textGradient.addColorStop(1, '#02c73d21');
 
       const maxR = Math.sqrt(cx * cx + cy * cy) * 1.05;
-      const minR = Math.min(width, height) * 0.10; // Круглая дыра в центре
+      const minR = Math.min(width, height) * 0.10;
 
-      offSize = Math.ceil(maxR * 2 + 100);
+      offSize = Math.ceil(maxR * 2 + 60);
       offCanvas = document.createElement('canvas');
-      offCanvas.width = offSize * dpr;
-      offCanvas.height = offSize * dpr;
+      offCanvas.width = offSize;
+      offCanvas.height = offSize;
 
       const offCtx = offCanvas.getContext('2d');
       if (!offCtx) return;
-      offCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
       const offCx = offSize / 2;
       const offCy = offSize / 2;
 
-      // Настройки спирали
       const TURNS = 15;
       const maxTheta = TURNS * 2 * Math.PI;
 
@@ -107,7 +99,6 @@ export const VortexBackground: React.FC = () => {
         offCtx.rotate(tangent);
         offCtx.globalAlpha = Math.max(0, alpha);
 
-        // Рисуем чистым белым цветом — маска сама перекрасит его в градиент
         offCtx.fillStyle = '#ffffff';
         offCtx.fillText(char, 0, 0);
         offCtx.restore();
@@ -124,50 +115,70 @@ export const VortexBackground: React.FC = () => {
 
     let currentRotation = 0;
     let lastTime = performance.now();
+    let lastRenderTime = performance.now();
     const ROTATION_SPEED = 0.04;
+    const TARGET_INTERVAL = 1000 / 30; // Ограничение 30 FPS для нулевой нагрузки на GPU
 
     const render = (now: number) => {
-      const dt = Math.min((now - lastTime) / 1000, 0.08);
-      lastTime = now;
+      if (!isRunning) return;
 
-      currentRotation += ROTATION_SPEED * dt;
+      const delta = now - lastRenderTime;
 
-      ctx.clearRect(0, 0, width, height);
+      // Пропускаем лишние кадры, если монитор 144Hz / 60Hz
+      if (delta >= TARGET_INTERVAL) {
+        lastRenderTime = now - (delta % TARGET_INTERVAL);
 
-      if (offCanvas && textGradient) {
-        // 1. Отрисовываем вращающуюся спираль
-        ctx.save();
-        ctx.translate(cx, cy);
-        ctx.rotate(currentRotation);
-        ctx.drawImage(offCanvas, -offSize / 2, -offSize / 2, offSize, offSize);
-        ctx.restore();
+        const dt = Math.min((now - lastTime) / 1000, 0.1);
+        lastTime = now;
+        currentRotation += ROTATION_SPEED * dt;
 
-        // 2. Мгновенно тонируем буквы градиентом в координатах экрана
-        // 'source-in' оставляет цвет градиента ТОЛЬКО на пикселях букв
-        ctx.save();
-        ctx.globalCompositeOperation = 'source-in';
-        ctx.fillStyle = textGradient;
-        ctx.fillRect(0, 0, width, height);
-        ctx.restore();
+        ctx.clearRect(0, 0, width, height);
+
+        if (offCanvas && textGradient) {
+          ctx.save();
+          ctx.translate(cx, cy);
+          ctx.rotate(currentRotation);
+          ctx.drawImage(offCanvas, -offSize / 2, -offSize / 2, offSize, offSize);
+          ctx.restore();
+
+          ctx.save();
+          ctx.globalCompositeOperation = 'source-in';
+          ctx.fillStyle = textGradient;
+          ctx.fillRect(0, 0, width, height);
+          ctx.restore();
+        }
       }
 
       animId = requestAnimationFrame(render);
     };
 
+    // Запуск единичного цикла
     animId = requestAnimationFrame(render);
 
+    // 2. Железная защита от размножения циклов при переключении вкладок
     const handleVisibility = () => {
       if (document.hidden) {
-        cancelAnimationFrame(animId);
+        isRunning = false;
+        if (animId !== null) {
+          cancelAnimationFrame(animId);
+          animId = null;
+        }
       } else {
-        lastTime = performance.now();
-        animId = requestAnimationFrame(render);
+        if (!isRunning) {
+          isRunning = true;
+          lastTime = performance.now();
+          lastRenderTime = performance.now();
+          if (animId !== null) cancelAnimationFrame(animId);
+          animId = requestAnimationFrame(render);
+        }
       }
     };
+
     document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
-      cancelAnimationFrame(animId);
+      isRunning = false;
+      if (animId !== null) cancelAnimationFrame(animId);
       window.removeEventListener('resize', bakeSpiral);
       document.removeEventListener('visibilitychange', handleVisibility);
     };
