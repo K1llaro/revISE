@@ -10,13 +10,12 @@ RUN npm run build
 FROM node:22.23.4-alpine AS runner
 WORKDIR /app
 
-# Устанавливаем curl (он нужен и для скачивания адаптера, и для Healthcheck)
-RUN apk add --no-cache curl
+# Устанавливаем curl и корневые SSL-сертификаты для безопасного скачивания с GitHub
+RUN apk add --no-cache curl ca-certificates
 
-# МАГИЯ AWS LAMBDA (Без лимитов AWS ECR):
-# Скачиваем бинарник адаптера напрямую с GitHub и кладем в папку расширений Lambda
-RUN mkdir -p /opt/extensions && \
-    curl -sSL https://github.com/awslabs/aws-lambda-web-adapter/releases/download/v0.8.4/lambda-adapter-x86_64.tar.gz | tar -xz -C /opt/extensions
+# Скачиваем адаптер через встроенную и надежную команду ADD от Docker
+ADD https://github.com/awslabs/aws-lambda-web-adapter/releases/download/v0.8.4/lambda-adapter-x86_64.tar.gz /tmp/adapter.tar.gz
+RUN mkdir -p /opt/extensions && tar -xzf /tmp/adapter.tar.gz -C /opt/extensions && rm /tmp/adapter.tar.gz
 
 ENV PORT=4321
 ENV NODE_ENV=production
@@ -34,5 +33,5 @@ EXPOSE 4321
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
   CMD curl -f http://localhost:4321/api/health || exit 1
 
-# Запускаем твой локальный сервер, который будет обрабатывать Serverless-трафик
+# Запускаем локальный сервер для обработки Serverless-трафика
 CMD ["node", "--import", "tsx", "api/local-server.ts"]
