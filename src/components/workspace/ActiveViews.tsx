@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Clock, Loader2, Check, CheckCircle2, XCircle, Star, AlertTriangle, Code2, Brain } from 'lucide-react';
-import type { QuizQuestion, ProgrammingChallenge, CodeAnalysisDrill, QuestionReviewDetail } from '../../types/ise';
+import type { QuizQuestion, ProgrammingChallenge, CodeAnalysisDrill } from '../../types/ise';
 
 export type QuizScoringMode = 'partial' | 'strict' | 'negative';
 

@@ -3,10 +3,6 @@ import { hasMixedQuizAnswer, scoreQuizQuestion } from '../src/components/workspa
 import { getChoiceLengthBiasWarning, getQuestionTypeCountMismatch } from '../src/lib/quizQuality.ts';
 import { hasStandardLearnSummaryFormat } from '../src/lib/learnSummaryFormat.ts';
 
-test('basic sanity check: 1 + 1 equals 2', () => {
-  expect(1 + 1).toBe(2);
-});
-
 test('Negative Marking scores correct and incorrect option decisions', () => {
   const question = {
     id: 1,

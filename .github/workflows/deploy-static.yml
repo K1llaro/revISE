@@ -2,23 +2,22 @@ name: Deploy Astro to AWS
 
 on:
   push:
-    branches:
-      - main # Trigger deployment only on push to the main branch
+    branches: [ main ]
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: 22
 
       - name: Install Astro dependencies
-        run: npm install
+        run: npm ci
 
       - name: Build Astro site
         env:
@@ -26,15 +25,33 @@ jobs:
           PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.PUBLIC_SUPABASE_ANON_KEY }}
         run: npm run build
 
-      - name: Install CDK dependencies
-        run: cd cdk && npm install
-
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
+          aws-region: eu-west-1
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push image to Amazon ECR
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: revise-api
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          # Создаем ECR репозиторий, если его еще нет
+          aws ecr describe-repositories --repository-names $ECR_REPOSITORY || aws ecr create-repository --repository-name $ECR_REPOSITORY
+          # Собираем и пушим образ
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
+          docker push -a $ECR_REGISTRY/$ECR_REPOSITORY
+          # Передаем тег образа в следующий шаг
+          echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
+
+      - name: Install CDK dependencies
+        run: cd cdk && npm ci
 
       - name: Bootstrap CDK
         run: cd cdk && npx cdk bootstrap
@@ -45,4 +62,6 @@ jobs:
           SUPABASE_ANON_KEY: ${{ secrets.PUBLIC_SUPABASE_ANON_KEY }}
           TURSO_SECRET_ARN: ${{ secrets.TURSO_SECRET_ARN }}
           ADMIN_EMAIL: ${{ vars.ADMIN_EMAIL }}
+          # Передаем тег образа в CDK!
+          IMAGE_TAG: ${{ env.IMAGE_TAG }}
         run: cd cdk && npx cdk deploy --require-approval never

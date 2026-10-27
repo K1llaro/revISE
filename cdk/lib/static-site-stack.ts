@@ -10,6 +10,7 @@ import * as events from 'aws-cdk-lib/aws-events';
 import * as targets from 'aws-cdk-lib/aws-events-targets';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import * as path from 'node:path';
+import * as ecr from 'aws-cdk-lib/aws-ecr';
 
 export class StaticSiteStack extends cdk.Stack {
     constructor(scope: cdk.App, id: string, props?: cdk.StackProps) {
@@ -33,16 +34,17 @@ export class StaticSiteStack extends cdk.Stack {
             ADMIN_EMAIL: process.env.ADMIN_EMAIL || 'dinosaurkiril@gmail.com',
         };
 
-        const apiHandler = new nodejs.NodejsFunction(this, 'TursoApiHandler', {
-            entry: path.join(repositoryRoot, 'api', 'handler.ts'),
-            handler: 'handler',
-            runtime: lambda.Runtime.NODEJS_22_X,
-            projectRoot: repositoryRoot,
-            depsLockFilePath: path.join(repositoryRoot, 'package-lock.json'),
+        const ecrRepo = ecr.Repository.fromRepositoryName(this, 'ReviseApiRepo', 'revise-api');
+        
+        const apiHandler = new lambda.DockerImageFunction(this, 'TursoApiHandler', {
+            code: lambda.DockerImageCode.fromEcr(ecrRepo, {
+                tagOrDigest: process.env.IMAGE_TAG || 'latest',
+            }),
             timeout: cdk.Duration.seconds(20),
             memorySize: 512,
             environment: lambdaEnvironment,
         });
+        
         tursoSecret.grantRead(apiHandler);
 
         const api = new apigateway.RestApi(this, 'TursoApi', {

@@ -16,13 +16,19 @@ export default tseslint.config(
   {
     files: ["**/*.{ts,tsx,js,mjs,cjs}"],
     rules: {
-      // Отключаем ложные конфликты стандартного JS с TypeScript
       "no-undef": "off",
       "no-unused-vars": "off",
-      // Мягкие предупреждения вместо падений билда
-      "@typescript-eslint/no-unused-vars": "warn",
-      "@typescript-eslint/no-explicit-any": "off",
       "@typescript-eslint/no-empty-object-type": "off",
+      "@typescript-eslint/no-explicit-any": "off",
+      // Разрешаем неиспользуемые аргументы и ошибки, если они начинаются с "_"
+      "@typescript-eslint/no-unused-vars": [
+        "warn",
+        {
+          "argsIgnorePattern": "^_",
+          "varsIgnorePattern": "^_",
+          "caughtErrorsIgnorePattern": "^_"
+        }
+      ],
     },
   }
 );

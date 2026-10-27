@@ -2,13 +2,13 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   X, Brain, Code2, Bug, Upload, Shield, History, Settings, Cpu, Loader2,
   AlertTriangle, Search, ChevronDown, ChevronUp, CheckCircle2, XCircle,
-  HelpCircle, Calendar, Hash, Plus, Key, User, Trash2, Trophy,
-  EyeOff, Eye, Sparkles, Filter, Download, Check
+  Calendar, Plus, User, Trophy,
+  EyeOff, Eye, Sparkles, Check
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-import type { AttachedFile, FlaggedMaterial, StudyYear, TestHistoryItem, QuestionReviewDetail, LeaderboardEntry, UserSession } from '../../types/ise';
+import type { AttachedFile, StudyYear, TestHistoryItem, LeaderboardEntry, UserSession } from '../../types/ise';
 import { getGeminiModelUsage } from '../../lib/gemini';
-import { FileDropzone, ApiKeyTooltip } from '../common/LayoutComponents';
+import { FileDropzone } from '../common/LayoutComponents';
 
 
 export interface QuizPresetSettings {
@@ -405,7 +405,7 @@ export const QuizModal: React.FC<{
   isOpen, onClose, quizCustomTitle, setQuizCustomTitle, quizQuestionCount, setQuizQuestionCount,
   quizCustomCount, setQuizCustomCount, quizTimerMinutes, setQuizTimerMinutes, quizCustomTimer, setQuizCustomTimer,
   quizScoringMode, setQuizScoringMode, immediateQuizFeedback, setImmediateQuizFeedback, quizTypePercentages, setQuizTypePercentages, quizThinkingMode, setQuizThinkingMode,
-  quizPresets, selectedQuizPresetId, quizPresetError, onCreateQuizPreset, onApplyQuizPreset, onSaveQuizPreset, onRenameQuizPreset, onDeleteQuizPreset,
+  quizPresets, selectedQuizPresetId, onCreateQuizPreset, onApplyQuizPreset, onSaveQuizPreset, onRenameQuizPreset, onDeleteQuizPreset,
   selectedTag, setSelectedTag, availableTags, quizAttachedFiles, setQuizAttachedFiles,
   quizPrompt, setQuizPrompt, isGenerating, generationError, onLaunch
 }) => {

@@ -140,8 +140,8 @@ export const AuthenticatedWorkspace: React.FC<{
   const profileMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (profileMenuRef.current && !profileMenuRef.current.contains(e.target as Node)) {
+    const handleClickOutside = (_e: MouseEvent) => {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(_e.target as Node)) {
         setIsProfileMenuOpen(false);
       }
     };
@@ -182,7 +182,7 @@ export const AuthenticatedWorkspace: React.FC<{
   }, [currentView, user.id, workspaceMode]);
 
   const [currentYear, setCurrentYear] = useState<StudyYear>(user.studyYear || 'year1');
-  const [yearPrompts, setYearPrompts] = useState<Record<StudyYear, string>>(DEFAULT_YEAR_PROMPTS);
+  const [yearPrompts] = useState<Record<StudyYear, string>>(DEFAULT_YEAR_PROMPTS);
 
   // Custom Titles
   const [quizCustomTitle, setQuizCustomTitle] = useState('');
@@ -195,8 +195,8 @@ export const AuthenticatedWorkspace: React.FC<{
 
   const [historyList, setHistoryList] = useState<TestHistoryItem[]>([]);
   const [flaggedItems, setFlaggedItems] = useState<FlaggedMaterial[]>([]);
-  const [studyMaterials, setStudyMaterials] = useState<StudyMaterial[]>([]);
-  const [studyMaterialsError, setStudyMaterialsError] = useState<string | null>(null);
+  const [, setStudyMaterials] = useState<StudyMaterial[]>([]);
+  const [, setStudyMaterialsError] = useState<string | null>(null);
 
   // Leaderboard Data
   const [leaderboardEntries, setLeaderboardEntries] = useState<LeaderboardEntry[]>([]);
@@ -232,7 +232,7 @@ export const AuthenticatedWorkspace: React.FC<{
 
   // Programming State
   const [progDifficulty, setProgDifficulty] = useState('Standard');
-  const [progThinkingMode, setProgThinkingMode] = useState(true);
+  const [progThinkingMode] = useState(true);
   const [progPrompt, setProgPrompt] = useState('');
   const [progAttachedFiles, setProgAttachedFiles] = useState<AttachedFile[]>([]);
   const [activeProg, setActiveProg] = useState<ProgrammingChallenge | null>(null);
@@ -242,7 +242,7 @@ export const AuthenticatedWorkspace: React.FC<{
 
   // Code Analysis State
   const [analysisDifficulty, setAnalysisDifficulty] = useState('Standard');
-  const [analysisThinkingMode, setAnalysisThinkingMode] = useState(true);
+  const [analysisThinkingMode] = useState(true);
   const [analysisPrompt, setAnalysisPrompt] = useState('');
   const [analysisAttachedFiles, setAnalysisAttachedFiles] = useState<AttachedFile[]>([]);
   const [activeAnalysis, setActiveAnalysis] = useState<CodeAnalysisDrill | null>(null);
@@ -343,8 +343,8 @@ export const AuthenticatedWorkspace: React.FC<{
         return a.nickname.localeCompare(b.nickname);
       });
 
-      entries.forEach((e, idx) => {
-        e.rank = idx + 1;
+      entries.forEach((_e, idx) => {
+      _e.rank = idx + 1;
       });
 
       setLeaderboardEntries(entries);
@@ -425,7 +425,7 @@ export const AuthenticatedWorkspace: React.FC<{
               const obj = JSON.parse(h.ai_feedback);
               parsedDetails = obj.details;
               parsedAdvice = obj.weakSpotsAdvice;
-            } catch (e) {}
+            } catch (_e) {}
           }
 
           return {
@@ -491,7 +491,7 @@ export const AuthenticatedWorkspace: React.FC<{
         const obj = JSON.parse(rawFeedback);
         parsedDetails = obj.details;
         parsedAdvice = obj.weakSpotsAdvice;
-      } catch (e) {}
+      } catch (_e) {}
     }
 
     setHistoryList((prev) =>
@@ -974,9 +974,9 @@ Use only the exact "type" values "multiple", "text", and "single". Do not omit a
       setIsGenerating(false);
       setActiveModal('none');
       setCurrentView('active_quiz');
-    } catch (e: any) {
+    } catch (_e: any) {
       setIsGenerating(false);
-      setGenerationError(e.message);
+      setGenerationError(_e.message);
     }
   };
 
@@ -1146,9 +1146,9 @@ Output strictly as JSON without markdown:
       setIsGenerating(false);
       setActiveModal('none');
       setCurrentView('active_prog');
-    } catch (e: any) {
+    } catch (_e: any) {
       setIsGenerating(false);
-      setGenerationError(e.message);
+      setGenerationError(_e.message);
     }
   };
 
@@ -1218,9 +1218,9 @@ Output strictly as JSON without markdown:
       setIsGenerating(false);
       setProgResults(result);
       setCurrentView('prog_results');
-    } catch (e: any) {
+    } catch (_e: any) {
       setIsGenerating(false);
-      alert(e.message);
+      alert(_e.message);
     }
   };
 
@@ -1294,9 +1294,9 @@ Output strictly as JSON without markdown:
       setIsGenerating(false);
       setActiveModal('none');
       setCurrentView('active_analysis');
-    } catch (e: any) {
+    } catch (_e: any) {
       setIsGenerating(false);
-      setGenerationError(e.message);
+      setGenerationError(_e.message);
     }
   };
 
@@ -1348,9 +1348,9 @@ Output strictly as JSON without markdown:
       setIsGenerating(false);
       setAnalysisResults({ score: finalScore, feedback: result.feedback });
       setCurrentView('analysis_results');
-    } catch (e: any) {
+    } catch (_e: any) {
       setIsGenerating(false);
-      alert(e.message);
+      alert(_e.message);
     }
   };
 
@@ -1434,8 +1434,8 @@ Output strictly as JSON without markdown:
       setUploadStatus(result.verdict === 'approved' ? `✅ Approved under ${tagName}!` : `⚠️ Flagged: ${result.reason}`);
       setUploadText('');
       setIngestionFiles([]);
-    } catch (e: any) {
-      setUploadStatus(`Error: ${e.message}`);
+    } catch (_e: any) {
+      setUploadStatus(`Error: ${_e.message}`);
     }
   };
 

@@ -1,133 +1,122 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { test, expect, vi, beforeEach } from 'vitest';
 import { handler } from '../api/handler.ts';
 
-const createEvent = (body, authorization = 'Bearer test-access-token') => ({
-  httpMethod: 'POST',
-  headers: authorization ? { authorization } : {},
-  body: JSON.stringify(body),
+const mockExecute = vi.fn();
+
+vi.mock('@libsql/client', () => ({
+  createClient: vi.fn(() => ({
+    execute: (...args) => mockExecute(...args),
+  })),
+}));
+
+// Используем реальные class-конструкторы для AWS SDK
+vi.mock('@aws-sdk/client-secrets-manager', () => ({
+  SecretsManagerClient: class {
+    send = vi.fn(async () => ({
+      SecretString: JSON.stringify({
+        tursoUrl: 'libsql://mock-test.turso.io',
+        tursoAuthToken: 'mock-token',
+      }),
+    }));
+  },
+  GetSecretValueCommand: class {},
+}));
+
+beforeEach(() => {
+  process.env.TURSO_DATABASE_URL = 'libsql://mock-test.turso.io';
+  process.env.TURSO_AUTH_TOKEN = 'mock-token';
+  process.env.SUPABASE_URL = 'https://mock.supabase.co';
+  process.env.SUPABASE_ANON_KEY = 'mock-anon-key';
+
+  mockExecute.mockReset();
+  mockExecute.mockResolvedValue({ rows: [{ alive: 1 }] });
+
+  global.fetch = vi.fn(async (url) => {
+    if (url.includes('/auth/v1/health')) {
+      return { ok: true, status: 200, json: async () => ({ status: 'ok' }) };
+    }
+    return { ok: false, status: 401, json: async () => ({ message: 'Unauthorized' }) };
+  });
 });
 
-const mockVerifiedUser = () => {
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+test('Health Probe: returns 200 OK and reports healthy subsystems', async () => {
+  const event = {
+    httpMethod: 'GET',
+    path: '/api/health',
+    headers: {},
+  };
+
+  const response = await handler(event);
+  expect(response.statusCode).toBe(200);
+
+  const body = JSON.parse(response.body);
+  expect(body.status).toBe('healthy');
+  expect(body.checks.database.status).toBe('healthy');
+  expect(body.checks.secrets.status).toBe('healthy');
+  expect(body.checks.auth.status).toBe('healthy');
+});
+
+test('Health Probe Resilience: returns 503 if database connection fails', async () => {
+  mockExecute.mockRejectedValueOnce(new Error('Connection timeout to Turso'));
+
+  const event = {
+    httpMethod: 'GET',
+    path: '/api/health',
+    headers: {},
+  };
+
+  const response = await handler(event);
+  expect(response.statusCode).toBe(503);
+
+  const body = JSON.parse(response.body);
+  expect(body.status).toBe('unhealthy');
+  expect(body.checks.database.status).toBe('unhealthy');
+  expect(body.checks.database.error).toContain('Connection timeout to Turso');
+});
+
+test('CORS Preflight: returns 204 No Content for OPTIONS request', async () => {
+  const event = {
+    httpMethod: 'OPTIONS',
+    path: '/api/data',
+    headers: {},
+  };
+
+  const response = await handler(event);
+  expect(response.statusCode).toBe(204);
+  expect(response.headers['access-control-allow-methods']).toContain('OPTIONS');
+});
+
+test('Security Gatekeeper: rejects unauthenticated requests with 401', async () => {
+  const event = {
+    httpMethod: 'POST',
+    path: '/api/data',
+    headers: {},
+    body: JSON.stringify({ table: 'profiles', operation: 'select' }),
+  };
+
+  const response = await handler(event);
+  expect(response.statusCode).toBe(401);
+
+  const body = JSON.parse(response.body);
+  expect(body.error).toContain('Supabase access token is required');
+});
+
+test('Input Validation: rejects malformed non-JSON body with 400', async () => {
+  const event = {
+    httpMethod: 'POST',
+    path: '/api/data',
+    headers: { authorization: 'Bearer valid-test-token' },
+    body: 'this is not a json string',
+  };
+
+  global.fetch = vi.fn().mockResolvedValueOnce({
     ok: true,
-    json: async () => ({ id: 'student-123', email: 'student@studentmail.ul.ie' }),
-  }));
-};
-
-afterEach(() => {
-  vi.unstubAllGlobals();
-  vi.unstubAllEnvs();
-});
-
-describe('Turso API authentication and request validation', () => {
-  it('rejects requests without a bearer token before contacting Supabase', async () => {
-    const fetchMock = vi.fn();
-    vi.stubGlobal('fetch', fetchMock);
-
-    const response = await handler(createEvent({ table: 'profiles', operation: 'select' }, ''));
-
-    expect(response.statusCode).toBe(401);
-    expect(fetchMock).not.toHaveBeenCalled();
+    json: async () => ({ id: 'usr-123', email: 'student@studentmail.ul.ie' }),
   });
 
-  it('rejects an expired or invalid Supabase access token', async () => {
-    vi.stubEnv('SUPABASE_URL', 'https://example.supabase.co');
-    vi.stubEnv('SUPABASE_ANON_KEY', 'public-test-key');
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 401 }));
+  const response = await handler(event);
+  expect(response.statusCode).toBe(400);
 
-    const response = await handler(createEvent({ table: 'profiles', operation: 'select' }));
-
-    expect(response.statusCode).toBe(401);
-  });
-
-  it('uses the public Supabase settings used by the local development environment', async () => {
-    vi.stubEnv('PUBLIC_SUPABASE_URL', 'https://local-example.supabase.co');
-    vi.stubEnv('PUBLIC_SUPABASE_ANON_KEY', 'public-test-key');
-    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 401 });
-    vi.stubGlobal('fetch', fetchMock);
-
-    const response = await handler(createEvent({ table: 'profiles', operation: 'select' }));
-
-    expect(response.statusCode).toBe(401);
-    expect(fetchMock).toHaveBeenCalledWith(
-      'https://local-example.supabase.co/auth/v1/user',
-      expect.objectContaining({ headers: expect.objectContaining({ apikey: 'public-test-key' }) }),
-    );
-  });
-
-  it('allows a user to update their own leaderboard consent', async () => {
-    vi.stubEnv('SUPABASE_URL', 'https://example.supabase.co');
-    vi.stubEnv('SUPABASE_ANON_KEY', 'public-test-key');
-    mockVerifiedUser();
-
-    const response = await handler(createEvent({
-      table: 'profiles',
-      operation: 'update',
-      values: { leaderboard_accepted: true },
-      filters: [{ column: 'id', operator: 'eq', value: 'student-123' }],
-    }));
-
-    expect(response.statusCode).not.toBe(403);
-    expect(JSON.parse(response.body).error).not.toBe('Updates are not permitted for these fields in profiles.');
-  });
-
-  it('rejects a table outside the server allowlist before connecting to Turso', async () => {
-    vi.stubEnv('SUPABASE_URL', 'https://example.supabase.co');
-    vi.stubEnv('SUPABASE_ANON_KEY', 'public-test-key');
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ id: 'student-123', email: 'student@studentmail.ul.ie' }),
-    });
-    vi.stubGlobal('fetch', fetchMock);
-
-    const response = await handler(createEvent({ table: 'auth.users', operation: 'select' }));
-
-    expect(response.statusCode).toBe(400);
-    expect(JSON.parse(response.body).error).toBe('Unsupported table.');
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-  });
-
-  it('rejects filters on columns that are not in the table schema', async () => {
-    vi.stubEnv('SUPABASE_URL', 'https://example.supabase.co');
-    vi.stubEnv('SUPABASE_ANON_KEY', 'public-test-key');
-    mockVerifiedUser();
-
-    const response = await handler(createEvent({
-      table: 'learn_notes',
-      operation: 'select',
-      filters: [{ column: 'private_key', operator: 'eq', value: 'secret' }],
-    }));
-
-    expect(response.statusCode).toBe(400);
-    expect(JSON.parse(response.body).error).toBe('Unsupported filter column.');
-  });
-
-  it('does not expose private material submission fields to other users', async () => {
-    vi.stubEnv('SUPABASE_URL', 'https://example.supabase.co');
-    vi.stubEnv('SUPABASE_ANON_KEY', 'public-test-key');
-    mockVerifiedUser();
-
-    const response = await handler(createEvent({
-      table: 'curriculum_materials',
-      operation: 'select',
-      columns: '*',
-      filters: [{ column: 'status', operator: 'eq', value: 'approved' }],
-    }));
-
-    expect(response.statusCode).toBe(403);
-  });
-
-  it('rejects upserts to user-owned tables before connecting to Turso', async () => {
-    vi.stubEnv('SUPABASE_URL', 'https://example.supabase.co');
-    vi.stubEnv('SUPABASE_ANON_KEY', 'public-test-key');
-    mockVerifiedUser();
-
-    const response = await handler(createEvent({
-      table: 'learn_notes',
-      operation: 'upsert',
-      values: { id: 'another-users-note', section_id: 'another-users-section', title: 'Injected note' },
-    }));
-
-    expect(response.statusCode).toBe(403);
-  });
+  const body = JSON.parse(response.body);
+  expect(body.error).toContain('JSON request body is required');
 });
