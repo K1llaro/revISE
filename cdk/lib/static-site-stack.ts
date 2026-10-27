@@ -91,34 +91,36 @@ export class StaticSiteStack extends cdk.Stack {
             targets: [new targets.LambdaFunction(cleanupHandler)],
         });
 
-        const apiCachePolicy = new cloudfront.CachePolicy(this, 'TursoApiCachePolicy', {
+        const apiCachePolicy = new cloudfront.CachePolicy(this, 'TursoApiCachePolicyV3', {
             minTtl: cdk.Duration.seconds(0),
-            defaultTtl: cdk.Duration.seconds(1), // Ставим 1 сек, чтобы CloudFront разрешил передавать Authorization (POST-запросы всё равно не кэшируются)
+            defaultTtl: cdk.Duration.seconds(1),
             maxTtl: cdk.Duration.seconds(1),
-            headerBehavior: cloudfront.CacheHeaderBehavior.allowList('Authorization'), // Возвращаем Authorization сюда
+            headerBehavior: cloudfront.CacheHeaderBehavior.allowList('Authorization'),
             cookieBehavior: cloudfront.CacheCookieBehavior.none(),
             queryStringBehavior: cloudfront.CacheQueryStringBehavior.none(),
         });
 
-        const apiOriginRequestPolicy = new cloudfront.OriginRequestPolicy(this, 'TursoApiOriginRequestPolicy', {
+        const apiOriginRequestPolicy = new cloudfront.OriginRequestPolicy(this, 'TursoApiOriginRequestPolicyV3', {
             headerBehavior: cloudfront.OriginRequestHeaderBehavior.allowList(
                 'Content-Type',
                 'Origin',
                 'Access-Control-Request-Method',
                 'Access-Control-Request-Headers',
-            ), // УБРАЛИ Authorization отсюда, так как CloudFront запрещает его в OriginRequestPolicy
+            ),
             cookieBehavior: cloudfront.OriginRequestCookieBehavior.none(),
             queryStringBehavior: cloudfront.OriginRequestQueryStringBehavior.none(),
         });
-        
 
-        const siteBucket = new s3.Bucket(this, 'SiteBucket', {
+        const siteBucket = new s3.Bucket(this, 'SiteBucketV2', {
             removalPolicy: cdk.RemovalPolicy.DESTROY,
             autoDeleteObjects: true,
         });
 
-        const distribution = new cloudfront.Distribution(this, 'SiteDistribution', {
-            defaultBehavior: { origin: origins.S3BucketOrigin.withOriginAccessControl(siteBucket) },
+        // Возвращаем родной и надежный хелпер CDK, который сам создаст чистый OAC с новым ID
+        const distribution = new cloudfront.Distribution(this, 'SiteDistributionV2', {
+            defaultBehavior: { 
+                origin: origins.S3BucketOrigin.withOriginAccessControl(siteBucket),
+            },
             additionalBehaviors: {
                 'api/*': {
                     origin: new origins.HttpOrigin(cdk.Fn.select(2, cdk.Fn.split('/', api.url)), {
