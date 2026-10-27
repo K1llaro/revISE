@@ -95,13 +95,14 @@ export class StaticSiteStack extends cdk.Stack {
             minTtl: cdk.Duration.seconds(0),
             defaultTtl: cdk.Duration.seconds(0),
             maxTtl: cdk.Duration.seconds(0),
-            headerBehavior: cloudfront.CacheHeaderBehavior.allowList('Authorization'),
+            headerBehavior: cloudfront.CacheHeaderBehavior.none(), // ИСПРАВЛЕНО: при отключенном кэше должно быть только none
             cookieBehavior: cloudfront.CacheCookieBehavior.none(),
             queryStringBehavior: cloudfront.CacheQueryStringBehavior.none(),
         });
-
+        
         const apiOriginRequestPolicy = new cloudfront.OriginRequestPolicy(this, 'TursoApiOriginRequestPolicy', {
             headerBehavior: cloudfront.OriginRequestHeaderBehavior.allowList(
+                'Authorization', // ДОБАВЛЕНО: чтобы токен авторизации долетал до бэкенда
                 'Content-Type',
                 'Origin',
                 'Access-Control-Request-Method',
