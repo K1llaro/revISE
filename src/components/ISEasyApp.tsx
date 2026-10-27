@@ -191,8 +191,14 @@ export default function ISEasyApp() {
     e.preventDefault();
     setOnboardingError(null);
 
-    if (onboardingPassword.length < 6) {
-      setOnboardingError('Password must be at least 6 characters long.');
+    const cleanNick = onboardingNickname.trim();
+    if (!cleanNick || cleanNick.length < 2 || cleanNick.length > 30) {
+      setOnboardingError('Nickname must be between 2 and 30 characters.');
+      return;
+    }
+
+    if (onboardingPassword.length < 6 || onboardingPassword.length > 30) {
+      setOnboardingError('Password must be between 6 and 30 characters.');
       return;
     }
 
@@ -203,7 +209,6 @@ export default function ISEasyApp() {
 
     setIsSavingOnboarding(true);
 
-    const cleanNick = onboardingNickname.trim() || 'Student';
     const cleanKey = onboardingApiKey.trim();
 
     // 1. Сначала сохраняем профиль
@@ -404,6 +409,7 @@ export default function ISEasyApp() {
                   type="text"
                   required
                   autoComplete="off"
+                  maxLength={30}
                   value={onboardingNickname}
                   onChange={(e) => setOnboardingNickname(e.target.value)}
                   placeholder="e.g. Kiril_Dev"
@@ -433,6 +439,7 @@ export default function ISEasyApp() {
                       type={showPassword ? 'text' : 'password'}
                       required
                       autoComplete="new-password"
+                      maxLength={30}
                       value={onboardingPassword}
                       onChange={(e) => setOnboardingPassword(e.target.value)}
                       placeholder="••••••••"
@@ -454,6 +461,7 @@ export default function ISEasyApp() {
                     type={showPassword ? 'text' : 'password'}
                     required
                     autoComplete="new-password"
+                    maxLength={30}
                     value={onboardingConfirmPassword}
                     onChange={(e) => setOnboardingConfirmPassword(e.target.value)}
                     placeholder="••••••••"

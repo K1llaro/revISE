@@ -527,23 +527,31 @@ export const QuizModal: React.FC<{
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1.5">Test Title (Optional)</label>
+                <div className="flex justify-between items-center mb-1.5">
+                  <label className="block text-xs font-semibold text-slate-300">Test Title (Optional)</label>
+                  <span className="text-[10px] font-mono text-slate-500">{quizCustomTitle.length}/80</span>
+                </div>
                 <input
                   type="text"
+                  maxLength={80}
                   value={quizCustomTitle}
                   onChange={(e) => setQuizCustomTitle(e.target.value)}
-                  placeholder="e.g. Lab 4 AWS CDK & CloudFront Revision"
+                  placeholder="e.g. Lab 4 AWS CDK & CloudFront Revision (max 80 chars)"
                   className="w-full p-2.5 rounded-xl bg-black/70 border border-white/10 text-xs text-white focus:outline-none focus:border-[#3ccb57]"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1.5">Topic Focus or Edge-Cases</label>
+                <div className="flex justify-between items-center mb-1.5">
+                  <label className="block text-xs font-semibold text-slate-300">Topic Focus or Edge-Cases</label>
+                  <span className="text-[10px] font-mono text-slate-500">{quizPrompt.length}/1000</span>
+                </div>
                 <textarea
                   rows={2}
+                  maxLength={1000}
                   value={quizPrompt}
                   onChange={(e) => setQuizPrompt(e.target.value)}
-                  placeholder="e.g. Focus on memory buses, address lines, and control signal timing..."
+                  placeholder="e.g. Focus on memory buses, address lines, and control signal timing... (max 1000 chars)"
                   className="w-full p-2.5 rounded-xl bg-black/70 border border-white/10 text-xs text-white focus:outline-none focus:border-[#3ccb57] resize-none"
                 />
               </div>
@@ -880,23 +888,31 @@ export const ProgrammingModal: React.FC<{
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1.5">Exercise Title (Optional)</label>
+                <div className="flex justify-between items-center mb-1.5">
+                  <label className="block text-xs font-semibold text-slate-300">Exercise Title (Optional)</label>
+                  <span className="text-[10px] font-mono text-slate-500">{progCustomTitle.length}/80</span>
+                </div>
                 <input
                   type="text"
+                  maxLength={80}
                   value={progCustomTitle}
                   onChange={(e) => setProgCustomTitle(e.target.value)}
-                  placeholder="e.g. Lab Exercise: Drawing ASCII Triangles with Nested Loops"
+                  placeholder="e.g. Lab Exercise: Drawing ASCII Triangles (max 80 chars)"
                   className="w-full p-2.5 rounded-xl bg-black/70 border border-white/10 text-xs text-white focus:outline-none focus:border-[#3ccb57]"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1.5">Requirements / Algorithmic Focus</label>
+                <div className="flex justify-between items-center mb-1.5">
+                  <label className="block text-xs font-semibold text-slate-300">Requirements / Algorithmic Focus</label>
+                  <span className="text-[10px] font-mono text-slate-500">{progPrompt.length}/1000</span>
+                </div>
                 <textarea
                   rows={3}
+                  maxLength={1000}
                   value={progPrompt}
                   onChange={(e) => setProgPrompt(e.target.value)}
-                  placeholder="e.g. Prompt user for matrix size, print diagonal pattern, handle boundary checks..."
+                  placeholder="e.g. Prompt user for matrix size, handle boundary checks... (max 1000 chars)"
                   className="w-full p-2.5 rounded-xl bg-black/70 border border-white/10 text-xs text-white focus:outline-none focus:border-[#3ccb57] resize-none"
                 />
               </div>
@@ -1096,23 +1112,31 @@ export const AnalysisModal: React.FC<{
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1.5">Drill Title (Optional)</label>
+                <div className="flex justify-between items-center mb-1.5">
+                  <label className="block text-xs font-semibold text-slate-300">Drill Title (Optional)</label>
+                  <span className="text-[10px] font-mono text-slate-500">{analysisCustomTitle.length}/80</span>
+                </div>
                 <input
                   type="text"
+                  maxLength={80}
                   value={analysisCustomTitle}
                   onChange={(e) => setAnalysisCustomTitle(e.target.value)}
-                  placeholder="e.g. Nested Loop Bounds & Off-by-One Tracing"
+                  placeholder="e.g. Nested Loop Bounds & Off-by-One Tracing (max 80 chars)"
                   className="w-full p-2.5 rounded-xl bg-black/70 border border-white/10 text-xs text-white focus:outline-none focus:border-[#3ccb57]"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1.5">Specific Operators or Patterns to Trace</label>
+                <div className="flex justify-between items-center mb-1.5">
+                  <label className="block text-xs font-semibold text-slate-300">Specific Operators or Patterns to Trace</label>
+                  <span className="text-[10px] font-mono text-slate-500">{analysisPrompt.length}/1000</span>
+                </div>
                 <textarea
                   rows={3}
+                  maxLength={1000}
                   value={analysisPrompt}
                   onChange={(e) => setAnalysisPrompt(e.target.value)}
-                  placeholder="e.g. Focus on ++i pre-increment vs i++ in loop termination, ternary operators..."
+                  placeholder="e.g. Focus on ++i pre-increment vs i++, ternary operators... (max 1000 chars)"
                   className="w-full p-2.5 rounded-xl bg-black/70 border border-white/10 text-xs text-white focus:outline-none focus:border-[#3ccb57] resize-none"
                 />
               </div>
@@ -1262,12 +1286,16 @@ export const UploadModal: React.FC<{
         />
 
         <div>
-          <label className="block text-xs font-semibold text-slate-300 mb-1.5">Or Paste Raw Lecture Notes</label>
+          <div className="flex justify-between items-center mb-1.5">
+            <label className="block text-xs font-semibold text-slate-300">Or Paste Raw Lecture Notes</label>
+            <span className="text-[10px] font-mono text-slate-500">{uploadText.length}/50000</span>
+          </div>
           <textarea
             rows={6}
+            maxLength={50000}
             value={uploadText}
             onChange={(e) => setUploadText(e.target.value)}
-            placeholder="Paste syllabus notes, lecture takeaways, or code snippets here..."
+            placeholder="Paste syllabus notes, lecture takeaways, or code snippets here... (max 50,000 chars)"
             className="w-full p-3 rounded-xl bg-black/60 border border-white/10 text-xs font-mono text-white focus:outline-none focus:border-[#3ccb57]"
           />
         </div>
@@ -1563,6 +1591,25 @@ export const HistoryModal: React.FC<{
   }, [isOpen]);
 
   const [rangePreset, setRangePreset] = useState<'7' | '14' | 'custom'>('14');
+
+  const formatIrishDateTime = (isoDate?: string, fallback = '') => {
+    if (!isoDate) return { dateStr: fallback || '—', timeStr: '' };
+    const d = new Date(isoDate);
+    if (isNaN(d.getTime())) return { dateStr: fallback || '—', timeStr: '' };
+    const dateStr = d.toLocaleDateString('en-IE', {
+      timeZone: 'Europe/Dublin',
+      day: '2-digit',
+      month: '2-digit',
+      year: '2-digit',
+    });
+    const timeStr = d.toLocaleTimeString('en-IE', {
+      timeZone: 'Europe/Dublin',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    });
+    return { dateStr, timeStr };
+  };
 
   const formatLocalDate = (d: Date) => {
     const year = d.getFullYear();
@@ -1920,6 +1967,8 @@ export const HistoryModal: React.FC<{
                     ? { text: 'text-[#3ccb57]', bg: 'bg-[#3ccb57]/10', border: 'border-[#3ccb57]/20' }
                     : { text: 'text-orange-400', bg: 'bg-orange-400/10', border: 'border-orange-400/30' };
 
+                  const { dateStr: irishDate, timeStr: irishTime } = formatIrishDateTime(h.rawDate, h.date);
+
                   return (
                     <div key={h.id} className={`p-4 rounded-xl border bg-black/40 space-y-3 transition-all ${isQuiz ? 'border-sky-400/20' : isCode ? 'border-white/10' : 'border-orange-400/20'}`}>
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 cursor-pointer" onClick={() => setExpandedId(isExpanded ? null : h.id)}>
@@ -1932,7 +1981,10 @@ export const HistoryModal: React.FC<{
 
                         <div className="flex items-center gap-3">
                           <span className={`text-xs font-mono font-bold ${typeColor.text}`}>+{h.pointsEarned || 0} Exp</span>
-                          <span className="text-xs text-slate-400">{h.timeSpent} · {h.date}</span>
+                          <div className="flex flex-col items-end text-right font-mono">
+                            <span className="text-xs font-semibold text-slate-200 leading-tight">{irishDate}</span>
+                            <span className="text-[11px] text-slate-400 leading-tight">{irishTime}{h.timeSpent ? ` · ${h.timeSpent}` : ''}</span>
+                          </div>
                           <span className={`text-base font-black font-mono ${typeColor.text}`}>{h.score}/{h.maxScore}</span>
                           <button
                             type="button"
@@ -2261,8 +2313,17 @@ export const SettingsModal: React.FC<{
   };
 
   const handleApplyProfile = async () => {
+    const cleanNick = editableNickname.trim();
+    if (!cleanNick || cleanNick.length < 2 || cleanNick.length > 30) {
+      setProfileMsg('Nickname must be between 2 and 30 characters.');
+      return;
+    }
+    if (editableRealName.trim().length > 50) {
+      setProfileMsg('Real name cannot exceed 50 characters.');
+      return;
+    }
     const { error } = await supabase.from('profiles').update({
-      nickname: editableNickname.trim(),
+      nickname: cleanNick,
       real_name: editableRealName.trim() || null,
       hide_from_leaderboard: hideLeaderboard,
     }).eq('id', user.id);
@@ -2283,7 +2344,9 @@ export const SettingsModal: React.FC<{
   const handleApplyPassword = async () => {
     if (!oldPassword) return setPasswordMsg({ text: 'Enter your current password.', error: true });
     if (!newPassword) return setPasswordMsg({ text: 'Enter a new password.', error: true });
-    if (newPassword.length < 6) return setPasswordMsg({ text: 'New password must be at least 6 characters.', error: true });
+    if (newPassword.length < 6 || newPassword.length > 30) {
+      return setPasswordMsg({ text: 'New password must be between 6 and 30 characters.', error: true });
+    }
 
     setIsUpdatingPassword(true);
     setPasswordMsg(null);
@@ -2404,12 +2467,12 @@ export const SettingsModal: React.FC<{
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
-                          <label className="block text-[11px] text-slate-400 mb-1">Nickname</label>
-                          <input type="text" value={editableNickname} onChange={(e) => setEditableNickname(e.target.value)} className="w-full p-3 rounded-xl bg-black/60 border border-white/10 text-xs text-white focus:outline-none focus:border-[#3ccb57]" />
+                          <label className="block text-[11px] text-slate-400 mb-1">Nickname (2–30 chars)</label>
+                          <input type="text" maxLength={30} value={editableNickname} onChange={(e) => setEditableNickname(e.target.value)} className="w-full p-3 rounded-xl bg-black/60 border border-white/10 text-xs text-white focus:outline-none focus:border-[#3ccb57]" />
                         </div>
                         <div>
-                          <label className="block text-[11px] text-slate-400 mb-1">Real Name (Optional)</label>
-                          <input type="text" value={editableRealName} onChange={(e) => setEditableRealName(e.target.value)} className="w-full p-3 rounded-xl bg-black/60 border border-white/10 text-xs text-white focus:outline-none focus:border-[#3ccb57]" />
+                          <label className="block text-[11px] text-slate-400 mb-1">Real Name (Optional, max 50 chars)</label>
+                          <input type="text" maxLength={50} value={editableRealName} onChange={(e) => setEditableRealName(e.target.value)} className="w-full p-3 rounded-xl bg-black/60 border border-white/10 text-xs text-white focus:outline-none focus:border-[#3ccb57]" />
                         </div>
                       </div>
 
@@ -2445,7 +2508,7 @@ export const SettingsModal: React.FC<{
                               type={showOldPassword ? 'text' : 'password'} 
                               value={oldPassword} 
                               onChange={(e) => setOldPassword(e.target.value)} 
-                              placeholder="Enter current password" 
+                              maxLength={30} placeholder="Enter current password" 
                               className="w-full p-3 pr-10 rounded-xl bg-black/60 border border-white/10 text-xs text-white focus:outline-none focus:border-[#3ccb57]" 
                             />
                             <button type="button" onClick={() => setShowOldPassword(!showOldPassword)} className="absolute inset-y-0 right-0 px-3 text-slate-400 hover:text-white cursor-pointer">
@@ -2462,7 +2525,7 @@ export const SettingsModal: React.FC<{
                               type={showNewPassword ? 'text' : 'password'} 
                               value={newPassword} 
                               onChange={(e) => setNewPassword(e.target.value)} 
-                              placeholder="New Password (min 6 chars)" 
+                              maxLength={30} placeholder="New Password (6–30 chars)" 
                               className="w-full p-3 pr-10 rounded-xl bg-black/60 border border-white/10 text-xs text-white focus:outline-none focus:border-[#3ccb57]" 
                             />
                             <button type="button" onClick={() => setShowNewPassword(!showNewPassword)} className="absolute inset-y-0 right-0 px-3 text-slate-400 hover:text-white cursor-pointer">

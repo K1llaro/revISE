@@ -28,20 +28,66 @@ export const FileDropzone: React.FC<{
   onFilesAdded: (newFiles: AttachedFile[]) => void;
   onFileRemoved: (index: number) => void;
   label?: string;
-}> = ({ files, onFilesAdded, onFileRemoved, label = 'Attach Lecture Slides / Code Files' }) => {
+  maxFiles?: number;
+  maxFileSizeMb?: number;
+}> = ({
+  files,
+  onFilesAdded,
+  onFileRemoved,
+  label = 'Attach Lecture Slides / Code Files',
+  maxFiles = 20,
+  maxFileSizeMb = 20,
+}) => {
   const [isDragging, setIsDragging] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+
+  const maxSizeBytes = maxFileSizeMb * 1024 * 1024;
 
   const handleFiles = async (fileList: FileList | null) => {
     if (!fileList || fileList.length === 0) return;
-    const readPromises = Array.from(fileList).map((f) => readFileForGemini(f));
-    const loaded = await Promise.all(readPromises);
-    onFilesAdded(loaded);
+    setErrorMsg(null);
+
+    const rawArray = Array.from(fileList);
+    const oversizedFiles = rawArray.filter((f) => f.size > maxSizeBytes);
+    const validSizeFiles = rawArray.filter((f) => f.size <= maxSizeBytes);
+    const remainingSlots = Math.max(0, maxFiles - files.length);
+
+    if (oversizedFiles.length > 0) {
+      const names = oversizedFiles.map((f) => f.name).slice(0, 2).join(', ');
+      const extra = oversizedFiles.length > 2 ? ` (+${oversizedFiles.length - 2} more)` : '';
+      setErrorMsg(`File exceeds ${maxFileSizeMb}MB limit: ${names}${extra}`);
+    }
+
+    if (remainingSlots <= 0) {
+      setErrorMsg(`Maximum ${maxFiles} files allowed. Please remove some files first.`);
+      return;
+    }
+
+    const filesToLoad = validSizeFiles.slice(0, remainingSlots);
+    if (validSizeFiles.length > remainingSlots) {
+      setErrorMsg(`Only ${remainingSlots} file(s) added. Maximum limit is ${maxFiles} files.`);
+    }
+
+    if (filesToLoad.length === 0) return;
+
+    try {
+      const readPromises = filesToLoad.map((f) => readFileForGemini(f));
+      const loaded = await Promise.all(readPromises);
+      onFilesAdded(loaded);
+    } catch {
+      setErrorMsg('Failed to process one or more files. Please try again.');
+    }
   };
 
   return (
     <div className="space-y-2">
-      <label className="block text-xs font-semibold text-slate-300">{label}</label>
+      <div className="flex justify-between items-center">
+        <label className="block text-xs font-semibold text-slate-300">{label}</label>
+        <span className="text-[10px] font-mono text-slate-400">
+          {files.length}/{maxFiles} files · Max {maxFileSizeMb}MB each
+        </span>
+      </div>
       <div
         onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
         onDragLeave={() => setIsDragging(false)}
@@ -60,8 +106,15 @@ export const FileDropzone: React.FC<{
           <FileUp className="h-4 w-4 text-[#3ccb57] shrink-0" />
           <span>Drag & Drop files here, or <strong className="text-white underline">browse desktop</strong></span>
         </div>
-        <p className="text-[10px] text-slate-500 mt-0.5">Supports PDF (native multimodal), Java, TS, Py, Markdown, TXT</p>
+        <p className="text-[10px] text-slate-500 mt-0.5">Supports PDF (native multimodal), Java, TS, Py, Markdown, TXT (up to 20MB / file)</p>
       </div>
+
+      {errorMsg && (
+        <div className="p-2.5 rounded-xl bg-red-950/40 border border-red-500/30 text-xs text-red-200 flex items-center justify-between gap-2 animate-fade-in">
+          <span>⚠️ {errorMsg}</span>
+          <button type="button" onClick={() => setErrorMsg(null)} className="text-red-400 hover:text-white text-xs px-1 cursor-pointer">✕</button>
+        </div>
+      )}
 
       {files.length > 0 && (
         <div className="flex flex-wrap gap-1.5 pt-1">

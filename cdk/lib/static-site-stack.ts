@@ -32,6 +32,7 @@ export class StaticSiteStack extends cdk.Stack {
             SUPABASE_ANON_KEY: supabaseAnonKey,
             ADMIN_EMAIL: process.env.ADMIN_EMAIL || 'dinosaurkiril@gmail.com',
         };
+
         const apiHandler = new nodejs.NodejsFunction(this, 'TursoApiHandler', {
             entry: path.join(repositoryRoot, 'api', 'handler.ts'),
             handler: 'handler',
@@ -49,16 +50,28 @@ export class StaticSiteStack extends cdk.Stack {
             deployOptions: { stageName: 'prod' },
             defaultCorsPreflightOptions: {
                 allowOrigins: apigateway.Cors.ALL_ORIGINS,
-                allowMethods: ['POST', 'OPTIONS'],
+                allowMethods: ['GET', 'POST', 'OPTIONS'],
                 allowHeaders: ['Authorization', 'Content-Type'],
                 maxAge: cdk.Duration.hours(1),
             },
         });
-        api.root.addResource('api').addResource('data').addMethod(
+
+        const apiResource = api.root.addResource('api');
+        
+        // POST /api/data (Основной шлюз базы данных)
+        apiResource.addResource('data').addMethod(
             'POST',
             new apigateway.LambdaIntegration(apiHandler),
             { apiKeyRequired: false },
         );
+
+        // GET /api/health (Публичный эндпоинт проверки здоровья)
+        apiResource.addResource('health').addMethod(
+            'GET',
+            new apigateway.LambdaIntegration(apiHandler),
+            { apiKeyRequired: false },
+        );
+
         const cleanupHandler = new nodejs.NodejsFunction(this, 'TestHistoryCleanupHandler', {
             entry: path.join(repositoryRoot, 'api', 'handler.ts'),
             handler: 'cleanupHandler',
@@ -84,6 +97,7 @@ export class StaticSiteStack extends cdk.Stack {
             cookieBehavior: cloudfront.CacheCookieBehavior.none(),
             queryStringBehavior: cloudfront.CacheQueryStringBehavior.none(),
         });
+
         const apiOriginRequestPolicy = new cloudfront.OriginRequestPolicy(this, 'TursoApiOriginRequestPolicy', {
             headerBehavior: cloudfront.OriginRequestHeaderBehavior.allowList(
                 'Content-Type',
@@ -120,7 +134,7 @@ export class StaticSiteStack extends cdk.Stack {
             sources: [s3deploy.Source.asset('../dist')],
             destinationBucket: siteBucket,
             distribution,
-            distributionPaths: ['/*'], 
+            distributionPaths: ['/*'],
         });
 
         new cdk.CfnOutput(this, 'CloudFrontUrl', {
@@ -128,4 +142,4 @@ export class StaticSiteStack extends cdk.Stack {
         });
         new cdk.CfnOutput(this, 'TursoApiGatewayUrl', { value: api.url });
     }
-}// Automatic CloudFront CDN cache invalidation!
+}

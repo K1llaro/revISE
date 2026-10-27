@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Brain, Code2, Bug, Upload, Settings, History, Shield, Trophy, BookOpen } from 'lucide-react';
+import { ArrowLeft, Brain, Code2, Bug, Upload, Settings, History, Shield, Trophy, BookOpen, MessageSquarePlus } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import type { UserSession, StudyYear, ActiveModal, AppView, TestHistoryItem, FlaggedMaterial, AttachedFile, QuizQuestion, ProgrammingChallenge, CodeAnalysisDrill, QuestionReviewDetail, LeaderboardEntry, StudyMaterial } from '../../types/ise';
 import { DEFAULT_YEAR_PROMPTS } from '../../lib/constants';
@@ -8,6 +8,7 @@ import { getChoiceLengthBiasWarning, getQuestionTypeCountMismatch } from '../../
 import { LearnWorkspace } from './LearnWorkspace';
 import { ActiveQuizView, QuizResultsView, ActiveProgView, ProgResultsView, ActiveAnalysisView, AnalysisResultsView, scoreQuizQuestion, type QuizScoringMode } from './ActiveViews';
 import { QuizModal, ProgrammingModal, AnalysisModal, UploadModal, AdminModal, HistoryModal, SettingsModal, LeaderboardModal, type QuizPreset, type QuizPresetSettings } from './WorkspaceModals';
+import { ReviewModal } from './ReviewModal';
 
 const HOME_PHRASES = [
   'It\'s not that complicated.',
@@ -132,6 +133,7 @@ export const AuthenticatedWorkspace: React.FC<{
   const [activeModal, setActiveModal] = useState<ActiveModal>('none');
   const [workspaceMode, setWorkspaceMode] = useState<'home' | 'practice' | 'learn'>('home');
   const [homePhrase, setHomePhrase] = useState('');
+  const [showReviewModal, setShowReviewModal] = useState(false);
   const homeEntryActiveRef = useRef(false);
   // === ДОБАВЛЯЕМ ВОТ ЭТО ДЛЯ МЕНЮ ПРОФИЛЯ ===
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
@@ -1582,6 +1584,12 @@ Output strictly as JSON without markdown:
           <span className="mt-7 inline-block text-sm font-bold text-slate-200">Open notebook →</span>
         </button>
       </div>
+      <div className="mt-6 sm:mt-8 flex justify-center">
+        <button type="button" onClick={() => setShowReviewModal(true)} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl border border-white/10 bg-white/[0.03] hover:bg-white/[0.08] hover:border-[#3ccb57]/40 text-slate-300 hover:text-white text-xs font-semibold tracking-wide transition-all shadow-lg hover:shadow-[0_0_20px_rgba(60,203,87,0.15)] group cursor-pointer active:scale-95">
+          <MessageSquarePlus className="h-4 w-4 text-[#3ccb57] group-hover:scale-110 transition-transform" />
+          <span>Send a review</span>
+        </button>
+      </div>
     </div>
   );
 
@@ -1756,6 +1764,7 @@ Output strictly as JSON without markdown:
         uiTheme={uiTheme}
         onUiThemeToggled={onUiThemeToggled}
       />
+      <ReviewModal isOpen={showReviewModal} onClose={() => setShowReviewModal(false)} user={user} />
     </div>
   );
 };

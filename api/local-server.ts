@@ -8,16 +8,23 @@ if (!Number.isInteger(port) || port < 1 || port > 65535) {
 }
 
 const server = createServer(async (request, response) => {
-  response.setHeader('access-control-allow-origin', 'http://localhost:4321');
+  response.setHeader('access-control-allow-origin', '*');
   response.setHeader('access-control-allow-headers', 'Authorization,Content-Type');
-  response.setHeader('access-control-allow-methods', 'POST,OPTIONS');
+  response.setHeader('access-control-allow-methods', 'GET,POST,OPTIONS');
   response.setHeader('vary', 'Origin');
 
   if (request.method === 'OPTIONS') {
     response.writeHead(204).end();
     return;
   }
-  if (request.method !== 'POST' || new URL(request.url || '/', 'http://localhost').pathname !== '/api/data') {
+
+  const url = new URL(request.url || '/', 'http://localhost');
+  const path = url.pathname;
+
+  const isDataPost = request.method === 'POST' && path === '/api/data';
+  const isHealthGet = request.method === 'GET' && path === '/api/health';
+
+  if (!isDataPost && !isHealthGet) {
     response.writeHead(404, { 'content-type': 'application/json' }).end(JSON.stringify({ error: 'Not found.' }));
     return;
   }
@@ -39,11 +46,13 @@ const server = createServer(async (request, response) => {
     Object.entries(request.headers)
       .filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
   );
+
   const event = {
     httpMethod: request.method,
+    path,
     headers,
     body: Buffer.concat(chunks).toString('utf8'),
-  } as APIGatewayProxyEvent;
+  } as unknown as APIGatewayProxyEvent;
 
   try {
     const result = await handler(event);
@@ -61,7 +70,7 @@ const server = createServer(async (request, response) => {
 });
 
 server.listen(port, '127.0.0.1', () => {
-  console.log(`Local Turso API listening at http://localhost:${port}/api/data`);
+  console.log(`Local Turso API listening at http://127.0.0.1:${port}/api/data and http://127.0.0.1:${port}/api/health`);
 });
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {

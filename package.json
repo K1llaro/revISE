@@ -39,6 +39,7 @@
     "concurrently": "^10.0.6",
     "eslint": "^10.11.0",
     "tsx": "^4.23.15",
+    "typescript-eslint": "^8.72.1",
     "vitest": "^5.0.1"
   }
 }

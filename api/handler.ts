@@ -104,10 +104,10 @@ const jsonResponse = (statusCode: number, body: unknown): APIGatewayProxyResult 
   statusCode,
   headers: {
     'content-type': 'application/json; charset=utf-8',
-    'cache-control': 'no-store',
+    'cache-control': 'no-store, no-cache, must-revalidate',
     'access-control-allow-origin': '*',
     'access-control-allow-headers': 'Authorization,Content-Type',
-    'access-control-allow-methods': 'POST,OPTIONS',
+    'access-control-allow-methods': 'GET,POST,OPTIONS',
   },
   body: JSON.stringify(body),
 });
@@ -154,6 +154,83 @@ const getSupabaseConfig = () => ({
   url: process.env.SUPABASE_URL || process.env.PUBLIC_SUPABASE_URL,
   anonKey: process.env.SUPABASE_ANON_KEY || process.env.PUBLIC_SUPABASE_ANON_KEY,
 });
+
+/* ==========================================================================
+   DEEP HEALTH CHECK IMPLEMENTATION
+   ========================================================================== */
+export const checkHealth = async (): Promise<APIGatewayProxyResult> => {
+  const startTime = Date.now();
+  const checks: Record<string, { status: 'healthy' | 'unhealthy'; latencyMs?: number; error?: string }> = {};
+
+  // 1. Проверка Secrets / Конфигурации
+  try {
+    const secret = await getSecret();
+    checks.secrets = {
+      status: secret.tursoUrl && secret.tursoAuthToken ? 'healthy' : 'unhealthy',
+    };
+  } catch (error) {
+    checks.secrets = {
+      status: 'unhealthy',
+      error: error instanceof Error ? error.message : 'Secrets retrieval failed',
+    };
+  }
+
+  // 2. Глубокий пинг базы данных Turso (SELECT 1)
+  const dbStart = Date.now();
+  try {
+    const db = await getDatabase();
+    const result = await db.execute('SELECT 1 AS alive');
+    const dbLatency = Date.now() - dbStart;
+    checks.database = {
+      status: result.rows.length > 0 ? 'healthy' : 'unhealthy',
+      latencyMs: dbLatency,
+    };
+  } catch (error) {
+    checks.database = {
+      status: 'unhealthy',
+      latencyMs: Date.now() - dbStart,
+      error: error instanceof Error ? error.message : 'Turso database unreachable',
+    };
+  }
+
+  // 3. Проверка доступности Supabase Auth
+  const authStart = Date.now();
+  try {
+    const { url: supabaseUrl, anonKey } = getSupabaseConfig();
+    if (!supabaseUrl || !anonKey) {
+      checks.auth = { status: 'unhealthy', error: 'Supabase configuration missing' };
+    } else {
+      const response = await fetch(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/health`, {
+        headers: { apikey: anonKey },
+      });
+      const authLatency = Date.now() - authStart;
+      checks.auth = {
+        // Если эндпоинт вернул 200 или любой статус авторизации, сервис живой
+        status: response.status < 500 ? 'healthy' : 'unhealthy',
+        latencyMs: authLatency,
+      };
+    }
+  } catch (error) {
+    checks.auth = {
+      status: 'unhealthy',
+      latencyMs: Date.now() - authStart,
+      error: error instanceof Error ? error.message : 'Supabase Auth unreachable',
+    };
+  }
+
+  // Вычисляем финальный статус
+  const isHealthy = Object.values(checks).every((c) => c.status === 'healthy');
+  const totalDurationMs = Date.now() - startTime;
+
+  return jsonResponse(isHealthy ? 200 : 503, {
+    status: isHealthy ? 'healthy' : 'unhealthy',
+    environment: process.env.AWS_LAMBDA_FUNCTION_NAME ? 'aws-lambda' : 'local',
+    timestamp: new Date().toISOString(),
+    totalDurationMs,
+    uptimeSeconds: Math.floor(process.uptime()),
+    checks,
+  });
+};
 
 const authenticate = async (event: APIGatewayProxyEvent): Promise<Identity> => {
   const authorization = event.headers.authorization || event.headers.Authorization || '';
@@ -234,6 +311,15 @@ const validateValue = (table: TableName, column: string, value: unknown): InValu
     return value;
   }
   if (typeof value !== 'string') throw new HttpError(400, `${column} must be a string.`);
+  if (table === 'profiles' && column === 'nickname' && (value.trim().length < 1 || value.trim().length > 30)) {
+    throw new HttpError(400, 'Nickname must be between 1 and 30 characters.');
+  }
+  if (table === 'profiles' && column === 'real_name' && value.trim().length > 50) {
+    throw new HttpError(400, 'Real name cannot exceed 50 characters.');
+  }
+  if (column === 'title' && value.length > 150) {
+    throw new HttpError(400, 'Title cannot exceed 150 characters.');
+  }
   if (column === 'study_year' && !['year1', 'year2', 'year3', 'year4'].includes(value)) {
     throw new HttpError(400, 'study_year must be one of year1, year2, year3, or year4.');
   }
@@ -623,6 +709,13 @@ const deleteAccount = async (identity: Identity): Promise<null> => {
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   try {
     if (event.httpMethod === 'OPTIONS') return jsonResponse(204, {});
+
+    // ПЕРЕХВАТ ПРОВЕРКИ ЗДОРОВЬЯ (БЕЗ АВТОРИЗАЦИИ)
+    const requestPath = event.path || (event as any).rawPath || '';
+    if (event.httpMethod === 'GET' && (requestPath.endsWith('/health') || requestPath.endsWith('/health/'))) {
+      return await checkHealth();
+    }
+
     const identity = await authenticate(event);
     if (!event.body || event.body.length > 1_000_000) throw new HttpError(413, 'Request body is missing or too large.');
     let body: unknown;

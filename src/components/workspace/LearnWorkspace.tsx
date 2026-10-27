@@ -1033,7 +1033,7 @@ Learn notes (summaries of the uploaded course slides):
     setStatus('Reviewing your study material…');
     const selectedSummaryMode = SUMMARY_MODES.find((mode) => mode.id === summaryMode) || SUMMARY_MODES[3];
     const sourceNames = attachedFiles.map((file) => file.name);
-    let existingTags: string[] = [];
+    const existingTags: string[] = [];
     let tagWarning = '';
     try {
       const pageSize = 500;
