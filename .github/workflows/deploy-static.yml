@@ -7,6 +7,14 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    # ПЕРЕНОСИМ ПЕРЕМЕННЫЕ СЮДА: теперь они доступны на КАЖДОМ шаге (включая cdk bootstrap)
+    env:
+      SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.PUBLIC_SUPABASE_ANON_KEY }}
+      TURSO_SECRET_ARN: ${{ secrets.TURSO_SECRET_ARN }}
+      ADMIN_EMAIL: ${{ vars.ADMIN_EMAIL }}
+      IMAGE_TAG: ${{ github.sha }}
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -30,7 +38,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: eu-west-1
+          aws-region: us-east-1
 
       - name: Login to Amazon ECR
         id: login-ecr
@@ -40,21 +48,16 @@ jobs:
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: revise-api
-          IMAGE_TAG: ${{ github.sha }}
-          PUBLIC_SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
-          PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.PUBLIC_SUPABASE_ANON_KEY }}
         run: |
           aws ecr describe-repositories --repository-names $ECR_REPOSITORY || aws ecr create-repository --repository-name $ECR_REPOSITORY
           
-          # Передаем ключи Supabase внутрь docker build через --build-arg
           docker build \
-            --build-arg PUBLIC_SUPABASE_URL="$PUBLIC_SUPABASE_URL" \
-            --build-arg PUBLIC_SUPABASE_ANON_KEY="$PUBLIC_SUPABASE_ANON_KEY" \
-            -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+            --build-arg PUBLIC_SUPABASE_URL="${{ secrets.PUBLIC_SUPABASE_URL }}" \
+            --build-arg PUBLIC_SUPABASE_ANON_KEY="${{ secrets.PUBLIC_SUPABASE_ANON_KEY }}" \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:${{ env.IMAGE_TAG }} \
             -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
             
           docker push -a $ECR_REGISTRY/$ECR_REPOSITORY
-          echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
 
       - name: Install CDK dependencies
         run: cd cdk && npm ci
@@ -63,11 +66,4 @@ jobs:
         run: cd cdk && npx cdk bootstrap
 
       - name: Deploy CDK infrastructure to AWS
-        env:
-          SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.PUBLIC_SUPABASE_ANON_KEY }}
-          TURSO_SECRET_ARN: ${{ secrets.TURSO_SECRET_ARN }}
-          ADMIN_EMAIL: ${{ vars.ADMIN_EMAIL }}
-          # Передаем тег образа в CDK!
-          IMAGE_TAG: ${{ env.IMAGE_TAG }}
         run: cd cdk && npx cdk deploy --require-approval never
