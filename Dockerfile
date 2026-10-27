@@ -10,10 +10,14 @@ RUN npm run build
 FROM node:22-alpine AS runner
 WORKDIR /app
 
-# МАГИЯ AWS LAMBDA: этот адаптер переводит вызовы Serverless в обычные HTTP запросы на порт 4321
-COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:0.8.4 /lambda-adapter /opt/extensions/lambda-adapter
-
+# Устанавливаем curl (он нужен и для скачивания адаптера, и для Healthcheck)
 RUN apk add --no-cache curl
+
+# МАГИЯ AWS LAMBDA (Без лимитов AWS ECR):
+# Скачиваем бинарник адаптера напрямую с GitHub и кладем в папку расширений Lambda
+RUN mkdir -p /opt/extensions && \
+    curl -sSL https://github.com/awslabs/aws-lambda-web-adapter/releases/download/v0.8.4/lambda-adapter-x86_64.tar.gz | tar -xz -C /opt/extensions
+
 ENV PORT=4321
 ENV NODE_ENV=production
 
