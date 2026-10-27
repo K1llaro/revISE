@@ -93,24 +93,24 @@ export class StaticSiteStack extends cdk.Stack {
 
         const apiCachePolicy = new cloudfront.CachePolicy(this, 'TursoApiCachePolicy', {
             minTtl: cdk.Duration.seconds(0),
-            defaultTtl: cdk.Duration.seconds(0),
-            maxTtl: cdk.Duration.seconds(0),
-            headerBehavior: cloudfront.CacheHeaderBehavior.none(), // ИСПРАВЛЕНО: при отключенном кэше должно быть только none
+            defaultTtl: cdk.Duration.seconds(1), // Ставим 1 сек, чтобы CloudFront разрешил передавать Authorization (POST-запросы всё равно не кэшируются)
+            maxTtl: cdk.Duration.seconds(1),
+            headerBehavior: cloudfront.CacheHeaderBehavior.allowList('Authorization'), // Возвращаем Authorization сюда
             cookieBehavior: cloudfront.CacheCookieBehavior.none(),
             queryStringBehavior: cloudfront.CacheQueryStringBehavior.none(),
         });
-        
+
         const apiOriginRequestPolicy = new cloudfront.OriginRequestPolicy(this, 'TursoApiOriginRequestPolicy', {
             headerBehavior: cloudfront.OriginRequestHeaderBehavior.allowList(
-                'Authorization', // ДОБАВЛЕНО: чтобы токен авторизации долетал до бэкенда
                 'Content-Type',
                 'Origin',
                 'Access-Control-Request-Method',
                 'Access-Control-Request-Headers',
-            ),
+            ), // УБРАЛИ Authorization отсюда, так как CloudFront запрещает его в OriginRequestPolicy
             cookieBehavior: cloudfront.OriginRequestCookieBehavior.none(),
             queryStringBehavior: cloudfront.OriginRequestQueryStringBehavior.none(),
         });
+        
 
         const siteBucket = new s3.Bucket(this, 'SiteBucket', {
             removalPolicy: cdk.RemovalPolicy.DESTROY,
