@@ -4,6 +4,12 @@
 FROM node:22.23.4-alpine AS builder
 WORKDIR /app
 
+# Передаем публичные ключи Supabase внутрь Docker-сборки, так как Astro запекает их в билд
+ARG PUBLIC_SUPABASE_URL
+ARG PUBLIC_SUPABASE_ANON_KEY
+ENV PUBLIC_SUPABASE_URL=$PUBLIC_SUPABASE_URL
+ENV PUBLIC_SUPABASE_ANON_KEY=$PUBLIC_SUPABASE_ANON_KEY
+
 COPY package*.json ./
 RUN npm ci
 COPY . .

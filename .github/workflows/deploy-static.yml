@@ -41,13 +41,19 @@ jobs:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: revise-api
           IMAGE_TAG: ${{ github.sha }}
+          PUBLIC_SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
+          PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.PUBLIC_SUPABASE_ANON_KEY }}
         run: |
-          # Создаем ECR репозиторий, если его еще нет
           aws ecr describe-repositories --repository-names $ECR_REPOSITORY || aws ecr create-repository --repository-name $ECR_REPOSITORY
-          # Собираем и пушим образ
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
+          
+          # Передаем ключи Supabase внутрь docker build через --build-arg
+          docker build \
+            --build-arg PUBLIC_SUPABASE_URL="$PUBLIC_SUPABASE_URL" \
+            --build-arg PUBLIC_SUPABASE_ANON_KEY="$PUBLIC_SUPABASE_ANON_KEY" \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
+            
           docker push -a $ECR_REGISTRY/$ECR_REPOSITORY
-          # Передаем тег образа в следующий шаг
           echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
 
       - name: Install CDK dependencies
