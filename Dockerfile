@@ -1,45 +1,32 @@
 # ==============================================================================
-# СТАДИЯ 1: Сборка статики Astro (Builder)
+# СТАДИЯ 1: Сборка и бандлинг TypeScript API в один JS-файл (Builder)
 # ==============================================================================
-FROM node:22.23.4-alpine AS builder
+FROM node:22-alpine AS builder
 WORKDIR /app
-
-# Передаем публичные ключи Supabase внутрь Docker-сборки, так как Astro запекает их в билд
-ARG PUBLIC_SUPABASE_URL
-ARG PUBLIC_SUPABASE_ANON_KEY
-ENV PUBLIC_SUPABASE_URL=$PUBLIC_SUPABASE_URL
-ENV PUBLIC_SUPABASE_ANON_KEY=$PUBLIC_SUPABASE_ANON_KEY
 
 COPY package*.json ./
 RUN npm ci
+
 COPY . .
 
-ENV NODE_ENV=production
-RUN npm run build
+# Собираем api/handler.ts в один легковесный файл dist-api/index.js
+# @aws-sdk оставляем внешним, так как он уже встроен в AWS Lambda
+RUN npx --yes esbuild api/handler.ts \
+  --bundle \
+  --platform=node \
+  --target=node22 \
+  --format=cjs \
+  --outfile=dist-api/index.js \
+  --external:@aws-sdk/*
 
 # ==============================================================================
-# СТАДИЯ 2: Продакшен-сервер (Runner)
+# СТАДИЯ 2: Официальная среда выполнения AWS Lambda (Runner)
 # ==============================================================================
-FROM node:22.23.4-alpine AS runner
-WORKDIR /app
+FROM public.ecr.aws/lambda/nodejs:22
+WORKDIR ${LAMBDA_TASK_ROOT}
 
-# Устанавливаем curl для прохождения Healthcheck
-RUN apk add --no-cache curl
+# Копируем готовый скомпилированный код бэкенда
+COPY --from=builder /app/dist-api/index.js ./index.js
 
-# Устанавливаем легчайший и быстрый статический HTTP-сервер
-RUN npm install -g serve
-
-ENV PORT=4321
-ENV NODE_ENV=production
-
-# Копируем только готовый скомпилированный сайт из стадии билдера
-COPY --from=builder /app/dist ./dist
-
-EXPOSE 4321
-
-# Пункт 4 из слайда: встроенный Healthcheck для команды `docker inspect`
-HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:4321/ || exit 1
-
-# Пункт 3 из слайда: запуск сервера на порту 4321
-CMD ["serve", "-s", "dist", "-l", "4321"]
+# Указываем Lambda точку входа: файл index.js, экспортированная функция handler
+CMD [ "index.handler" ]
