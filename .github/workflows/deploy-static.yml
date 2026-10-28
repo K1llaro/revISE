@@ -47,17 +47,25 @@ jobs:
       - name: Build, tag, and push image to Amazon ECR
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: revise-api
         run: |
-          aws ecr describe-repositories --repository-names $ECR_REPOSITORY || aws ecr create-repository --repository-name $ECR_REPOSITORY
-          
+          # 1. Образ API для Lambda
+          aws ecr describe-repositories --repository-names revise-api || aws ecr create-repository --repository-name revise-api
           docker build \
             --build-arg PUBLIC_SUPABASE_URL="${{ secrets.PUBLIC_SUPABASE_URL }}" \
             --build-arg PUBLIC_SUPABASE_ANON_KEY="${{ secrets.PUBLIC_SUPABASE_ANON_KEY }}" \
-            -t $ECR_REGISTRY/$ECR_REPOSITORY:${{ env.IMAGE_TAG }} \
-            -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
-            
-          docker push -a $ECR_REGISTRY/$ECR_REPOSITORY
+            -t $ECR_REGISTRY/revise-api:${{ env.IMAGE_TAG }} \
+            -t $ECR_REGISTRY/revise-api:latest .
+          docker push -a $ECR_REGISTRY/revise-api
+
+          # 2. Образ Astro для Load Balancer (Lab 6: astro-blog)
+          aws ecr describe-repositories --repository-names astro-blog || aws ecr create-repository --repository-name astro-blog
+          docker build \
+            -f Dockerfile.astro \
+            --build-arg PUBLIC_SUPABASE_URL="${{ secrets.PUBLIC_SUPABASE_URL }}" \
+            --build-arg PUBLIC_SUPABASE_ANON_KEY="${{ secrets.PUBLIC_SUPABASE_ANON_KEY }}" \
+            -t $ECR_REGISTRY/astro-blog:${{ env.IMAGE_TAG }} \
+            -t $ECR_REGISTRY/astro-blog:latest .
+          docker push -a $ECR_REGISTRY/astro-blog
 
       - name: Install CDK dependencies
         run: cd cdk && npm ci
