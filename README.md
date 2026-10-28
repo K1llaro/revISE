@@ -1,3 +1,5 @@
+[![Deploy Astro to AWS](https://github.com/K1llaro/revISE/actions/workflows/deploy-static.yml/badge.svg)](https://github.com/K1llaro/revISE/actions/workflows/deploy-static.yml)
+
 DEV LAUNCH:
 
 1. Open VS Code (or other IDE)
