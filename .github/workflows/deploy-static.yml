@@ -9,6 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     # ПЕРЕНОСИМ ПЕРЕМЕННЫЕ СЮДА: теперь они доступны на КАЖДОМ шаге (включая cdk bootstrap)
     env:
+      BUILDX_NO_DEFAULT_ATTESTATIONS: 1
       SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
       SUPABASE_ANON_KEY: ${{ secrets.PUBLIC_SUPABASE_ANON_KEY }}
       TURSO_SECRET_ARN: ${{ secrets.TURSO_SECRET_ARN }}
