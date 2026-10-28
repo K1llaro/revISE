@@ -1,7 +1,7 @@
 # ==============================================================================
-# СТАДИЯ 1: Сборка Astro
+# СТАДИЯ 1: Сборка Astro и компиляция сервера
 # ==============================================================================
-FROM node:22-alpine AS builder
+FROM node:22-slim AS builder
 WORKDIR /app
 
 ARG PUBLIC_SUPABASE_URL
@@ -11,28 +11,47 @@ ENV PUBLIC_SUPABASE_ANON_KEY=$PUBLIC_SUPABASE_ANON_KEY
 
 COPY package*.json ./
 RUN npm ci
+
 COPY . .
+
+# Собираем статику сайта
 ENV NODE_ENV=production
 RUN npm run build
 
+# Собираем api/server.ts в единый исполняемый файл
+RUN npx --yes esbuild api/server.ts \
+  --bundle \
+  --platform=node \
+  --target=node22 \
+  --format=cjs \
+  --outfile=dist-server/server.js \
+  --external:@aws-sdk/* \
+  --external:@libsql/*
+
+RUN npm prune --omit=dev
+
 # ==============================================================================
-# СТАДИЯ 2: Продакшен-контейнер на порту 4321
+# СТАДИЯ 2: Продакшен-контейнер для ECS Fargate
 # ==============================================================================
-FROM node:22-alpine AS runner
+FROM node:22-slim AS runner
 WORKDIR /app
 
-RUN apk add --no-cache curl
-RUN npm install -g serve
+RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
 
 ENV PORT=4321
 ENV NODE_ENV=production
 
+# Копируем зависимости с нативным драйвером Turso
+COPY --from=builder /app/node_modules ./node_modules
+# Копируем статику Astro
 COPY --from=builder /app/dist ./dist
+# Копируем сервер
+COPY --from=builder /app/dist-server/server.js ./server.js
 
 EXPOSE 4321
 
-# Проверка здоровья для балансировщика и docker inspect
+# Проверка здоровья прямо по /api/health!
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:4321/ || exit 1
+  CMD curl -f http://localhost:4321/api/health || exit 1
 
-CMD ["serve", "-s", "dist", "-l", "4321"]
+CMD ["node", "server.js"]
