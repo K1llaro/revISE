@@ -8,7 +8,7 @@ on:
         required: true
         type: string
       files:
-        description: 'Write files with a space (e.g. deploy-static.yml WorkspaceModals.tsx )'
+        description: 'Files (use space to separate multiple files, leave empty for all files)'
         required: false
         type: string
 
@@ -47,9 +47,9 @@ jobs:
           TARGET_FILES: ${{ inputs.files }}
         run: |
           if [ -n "$TARGET_FILES" ]; then
-            aider --model gemini/gemini-1.5-flash --yes-always --message "$USER_PROMPT" $TARGET_FILES
+            aider --model gemini/gemini-3.8-flash --yes-always --message "$USER_PROMPT" $TARGET_FILES
           else
-            aider --model gemini/gemini-1.5-flash --yes-always --message "$USER_PROMPT"
+            aider --model gemini/gemini-3.8-flash --yes-always --message "$USER_PROMPT"
           fi
 
       - name: Push changes
