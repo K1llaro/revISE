@@ -1345,12 +1345,12 @@ Output strictly as JSON without markdown:
       if (saveError) throw new Error(`Could not save code tracing results: ${saveError.message}`);
 
       loadData();
-      setIsGenerating(false);
       setAnalysisResults({ score: finalScore, feedback: result.feedback });
       setCurrentView('analysis_results');
-    } catch (_e: any) {
-      setIsGenerating(false);
-      alert(_e.message);
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      setIsGenerating(false); // <--- ГАРАНТИРОВАННЫЙ СБРОС ЗАГРУЗКИ
     }
   };
 
